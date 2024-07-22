@@ -43,3 +43,10 @@ def dijkstra(adjacency_matrix, source):
 if __name__ == "__main__":
     adjacency_matrix = compute_adjacency_matrix(10, 0.1)
     print(dijkstra(adjacency_matrix, 0))
+    
+def count_missed_offload(allocation, battery_level, status):
+    missed_offload = 0
+    for i, (alloc, battery, stat) in enumerate(zip(allocation, battery_level, status)):
+        if alloc == 1 and battery <= 0 and stat == 'operating':
+            missed_offload += 1
+    return missed_offload

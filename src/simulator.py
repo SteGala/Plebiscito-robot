@@ -1,4 +1,5 @@
 from src.robot import Robot
+from src.mpc import brute_force
 import random
 import numpy as np
 import pandas as pd
@@ -7,25 +8,18 @@ import os
 
 import matplotlib.pyplot as plt
 
-
 class Simulator:
-    def __init__(self, sim_name, n_robots, charging_threshold=0, operating_threshold=1, probability=1, move_computation_enabled=True) -> None:
-        """
-        Initialize the Simulator class.
-
-        Args:
-            sim_name (str): Name of the simulation.
-            n_robots (int): Number of robots in the simulation.
-            charging_threshold (int, optional): Battery level threshold for starting charging. Defaults to 0.
-            operating_threshold (int, optional): Battery level threshold for starting operating. Defaults to 1.
-            probability (float, optional): Probability of adjacency between robots. Defaults to 1.
-            move_computation_enabled (bool, optional): Flag to enable move computation. Defaults to True.
-        """
+    def __init__(self, sim_name, n_robots, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_enabled=True, optimize_computation_frequency=None, target_battery_fleet=0.5, prediction_horizon=5, weight_battery=1, weight_offloading=0.1) -> None:
         self.charging_threshold = charging_threshold
         self.operating_threshold = operating_threshold
         self.robots = []
         self.move_computation_enabled = move_computation_enabled
-        self.sim_name = sim_name
+        self.optimize_computation_frequency = optimize_computation_frequency
+        self.sim_name = "res/" + sim_name
+        self.target_battery_fleet = target_battery_fleet
+        self.prediction_horizon = prediction_horizon
+        self.weight_battery = weight_battery
+        self.weight_offloading = weight_offloading
         
         self.initialize_stats()
         
@@ -33,8 +27,11 @@ class Simulator:
         
         # Create n_robots instances of the Robot class with random battery levels, charge rates, and discharge rates
         for i in range(n_robots):
-            self.robots.append(Robot("robot" + str(i), battery_level=random.randint(20, 80), total_battery=100, charge_rate=random.randint(2, 5), disharge_rate=random.randint(1, 2)))
+            self.robots.append(Robot(i, battery_level=random.randint(20, 80), total_battery=100, charge_rate=random.randint(3, 5), disharge_rate=0)) #disharge_rate=random.randint(1, 2)
             
+        if probability != 1:
+            print("WARNING: The code has not being tested with probability != 1. Unexpected results may arise.")
+        
         # Compute probability-defined adjacency matrix 
         self.adjacency_matrix = compute_adjacency_matrix(n_robots, probability)   
         
@@ -62,6 +59,9 @@ class Simulator:
         for ep in range(epochs):
             available_robots_ids = []
             
+            # if ep in [56, 57]:
+            #     print()
+            
             # Iterate over each robot
             for id, robot in enumerate(self.robots):
                 battery = robot.tick()
@@ -69,33 +69,61 @@ class Simulator:
                 r_status = robot.get_status()
                 
                 # If battery level is below charging threshold and the robot is not already charging, start charging
-                if battery < self.charging_threshold and r_status != "charging":
+                if battery <= self.charging_threshold and r_status != "charging":
+                    #print("ch", id)
                     robot.charge()
                     available_robots_ids.append(id)
                 
                 # If battery level is above operating threshold and the robot is not already operating, set it to operate
                 elif battery >= self.operating_threshold and r_status != "operating":
-                    # Check if the robot is hosting a task
-                    hosted_task = robot.get_hosted_task()
-                    if hosted_task is not None:
-                        # Unoffload the task
-                        hosted_task.get_from().unoffload()
-                    
                     # Set the robot to operate
+                    #print("op", id)
                     robot.operate()
                 else:
                     # If the robot is not hosting a task and it is currently charging, add it to the available robots list
                     if not robot.is_hosting() and r_status == "charging":
                         available_robots_ids.append(id)
             
+            for r in self.robots:
+                r.update_computation()
+                
             # Use available robots to host tasks
             if self.move_computation_enabled:
                 self.move_computation(available_robots_ids)
                 
-            self.update_stats()
+            if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0:
+                self.optimize_computation()
+                
+            self.update_stats(ep)
 
         self.dump_report() 
         self.plot_results(res)
+        
+    def optimize_computation(self):
+        task_requirements = [r.get_self_task().get_consumption() for r in self.robots]
+        battery_levels = [r.get_battery_level() for r in self.robots]
+        battery_status = [r.get_battery_status() for r in self.robots]
+        discharge_rate = [r.get_discharge_rate() for r in self.robots]
+        charge_rate = [r.get_charge_rate() for r in self.robots]
+        constrained_allocation = [-1 for _ in range(len(self.robots))]
+        
+        for id, r in enumerate(self.robots):
+            if r.get_status() == "charging":
+                constrained_allocation[r.get_hosted_task().get_from().get_name()] = id
+        
+        offloading_decision_brute = brute_force(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, self.optimize_computation_frequency, costrained_allocation=constrained_allocation)
+        for i, id in enumerate(offloading_decision_brute):
+            if self.robots[i].get_self_task().get_to() != self.robots[id]:
+                if self.robots[i].has_offloaded():
+                    self.robots[i].get_self_task().get_to().unhost()
+                self.robots[i].offload(self.robots[id])
+                self.robots[id].host(self.robots[i].get_self_task())
+        
+        # for r in self.robots:
+            # print(r, r.get_self_task(), r.get_hosted_task())
+        # print()
+        
+        return
 
     def move_computation(self, available_robots_ids):
         """
@@ -121,12 +149,12 @@ class Simulator:
                     
                 for id in ids:
                     if not self.robots[id].has_offloaded() and self.robots[id].get_status() == "operating":
-                        self.robots[id].offload()
+                        self.robots[id].offload(robot)
                         assert robot.host(self.robots[id].get_self_task()) != False
                         found = True
                         break
 
-    def update_stats(self):
+    def update_stats(self, time_instant):
         """
         Update the simulation statistics.
         """
@@ -147,6 +175,7 @@ class Simulator:
         n_operating = {} 
         n_offloaded = {} 
         n_hosted = {} 
+        n_computation = {}
         
         for _, robot in enumerate(self.robots):
             stat = robot.get_stats()
@@ -157,8 +186,8 @@ class Simulator:
             n_operating[robot.name] = stat["n_operating"]
             n_offloaded[robot.name] = stat["n_offloaded"]
             n_hosted[robot.name] = stat["n_hosted"]
+            n_computation[robot.name] = stat["computation"]
             
-        
         # Create the directory if it doesn't exist
         if not os.path.exists(self.sim_name):
             os.makedirs(self.sim_name)
@@ -171,6 +200,7 @@ class Simulator:
         pd.DataFrame([n_operating]).to_csv(f"{self.sim_name}/n_operating.csv", index=False)
         pd.DataFrame([n_offloaded]).to_csv(f"{self.sim_name}/n_offloaded.csv", index=False)
         pd.DataFrame([n_hosted]).to_csv(f"{self.sim_name}/n_hosted.csv", index=False)
+        pd.DataFrame([n_computation]).to_csv(f"{self.sim_name}/n_computation.csv", index=False)
         
         pd.DataFrame([self.stats]).to_csv(f"{self.sim_name}/simulation_stats.csv", index=False)
              
@@ -182,7 +212,7 @@ class Simulator:
             data (dict): Dictionary containing battery levels for each robot.
         """
         num_robots = len(data)
-        fig, axs = plt.subplots(num_robots, 1, figsize=(8, 6*num_robots))
+        _, axs = plt.subplots(num_robots, 1, figsize=(8, 6*num_robots))
         
         for i, (robot, values) in enumerate(data.items()):
             axs[i].plot(values, label=robot)
@@ -192,4 +222,4 @@ class Simulator:
             axs[i].legend()
         
         # Save the plot as an image file
-        plt.savefig("battery_levels.png")
+        plt.savefig(self.sim_name + "/battery_levels.png")
