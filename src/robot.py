@@ -123,8 +123,8 @@ class Robot:
                 self.battery_level -= self.hosted_task.get_consumption()
                                 
             # TODO: might be removed in future. If the device is charging we can assume that the self task is not executed
-            if not self.has_offloaded():
-                self.battery_level -= self.self_task.get_consumption()
+            # if not self.has_offloaded():
+            #     self.battery_level -= self.self_task.get_consumption()
                 
             # check if the battery level is greater than the total battery
             if self.battery_level > self.total_battery:
