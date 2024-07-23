@@ -27,7 +27,7 @@ class Simulator:
         
         # Create n_robots instances of the Robot class with random battery levels, charge rates, and discharge rates
         for i in range(n_robots):
-            self.robots.append(Robot(i, battery_level=random.randint(20, 80), total_battery=100, charge_rate=random.randint(3, 5), disharge_rate=1)) #disharge_rate=random.randint(1, 2)
+            self.robots.append(Robot(i, battery_level=random.randint(200, 800), total_battery=1000, charge_rate=random.randint(4, 8), disharge_rate=random.randint(1, 2))) #disharge_rate=random.randint(1, 2)
             
         if probability != 1:
             print("WARNING: The code has not being tested with probability != 1. Unexpected results may arise.")
@@ -84,9 +84,6 @@ class Simulator:
             # Use available robots to host tasks
             if self.move_computation_enabled:
                 self.move_computation(available_robots_ids)
-                
-            if ep == 300:
-                self.print_infrastructure(ep)
                 
             if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0 and ep != 0:
                 self.optimize_computation()
