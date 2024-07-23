@@ -27,7 +27,7 @@ class Simulator:
         
         # Create n_robots instances of the Robot class with random battery levels, charge rates, and discharge rates
         for i in range(n_robots):
-            self.robots.append(Robot(i, battery_level=random.randint(20, 80), total_battery=100, charge_rate=random.randint(3, 5), disharge_rate=0)) #disharge_rate=random.randint(1, 2)
+            self.robots.append(Robot(i, battery_level=random.randint(20, 80), total_battery=100, charge_rate=random.randint(3, 5), disharge_rate=1)) #disharge_rate=random.randint(1, 2)
             
         if probability != 1:
             print("WARNING: The code has not being tested with probability != 1. Unexpected results may arise.")
@@ -59,9 +59,6 @@ class Simulator:
         for ep in range(epochs):
             available_robots_ids = []
             
-            # if ep in [56, 57]:
-            #     print()
-            
             # Iterate over each robot
             for id, robot in enumerate(self.robots):
                 battery = robot.tick()
@@ -83,22 +80,38 @@ class Simulator:
                     # If the robot is not hosting a task and it is currently charging, add it to the available robots list
                     if not robot.is_hosting() and r_status == "charging":
                         available_robots_ids.append(id)
-            
-            for r in self.robots:
-                r.update_computation()
-                
+                                
             # Use available robots to host tasks
             if self.move_computation_enabled:
                 self.move_computation(available_robots_ids)
                 
-            if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0:
+            if ep == 300:
+                self.print_infrastructure(ep)
+                
+            if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0 and ep != 0:
                 self.optimize_computation()
                 
+            for r in self.robots:
+                r.update_computation()
+            
+            assert self.check_infrastructure(), self.print_infrastructure(ep)
             self.update_stats(ep)
 
         self.dump_report() 
         self.plot_results(res)
         
+    def check_infrastructure(self): 
+        count = 0
+        for r in self.robots:   
+            count += r.stats["computation"]
+        return count%len(self.robots) == 0
+    
+    def print_infrastructure(self, ep):
+        print("Epoch: ", ep)
+        for r in self.robots:
+            print(r, "\t", r.get_self_task(), "\t", r.get_hosted_task())
+        print()
+    
     def optimize_computation(self):
         task_requirements = [r.get_self_task().get_consumption() for r in self.robots]
         battery_levels = [r.get_battery_level() for r in self.robots]
@@ -108,14 +121,17 @@ class Simulator:
         constrained_allocation = [-1 for _ in range(len(self.robots))]
         
         for id, r in enumerate(self.robots):
-            if r.get_status() == "charging":
+            if r.get_status() == "charging" and r.get_hosted_task() is not None:
                 constrained_allocation[r.get_hosted_task().get_from().get_name()] = id
         
         offloading_decision_brute = brute_force(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, self.optimize_computation_frequency, costrained_allocation=constrained_allocation)
-        for i, id in enumerate(offloading_decision_brute):
-            if self.robots[i].get_self_task().get_to() != self.robots[id]:
-                if self.robots[i].has_offloaded():
-                    self.robots[i].get_self_task().get_to().unhost()
+        
+        for r in self.robots:
+            r.unhost()
+            r.unoffload()
+            
+        for i, id in enumerate(offloading_decision_brute):     
+            if self.robots[id] != self.robots[i]:
                 self.robots[i].offload(self.robots[id])
                 self.robots[id].host(self.robots[i].get_self_task())
         
