@@ -1,6 +1,10 @@
+import copy
 import numpy as np
 from scipy.optimize import basinhopping
 from itertools import permutations
+from collections import Counter
+import time
+
 
 def advance_time(battery_levels, battery_status, offloading_decision, task_requirements, discharge_rate, charge_rate):
     for id, status in enumerate(battery_status):
@@ -41,7 +45,7 @@ def optimize(offloading_decision, task_requirements, battery_levels, battery_sta
         res.append((charging - operating) ** 2)
         battery_levels, battery_status = advance_time(battery_levels, battery_status, offloading_decision, task_requirements, discharge_rate, charge_rate)
 
-    return np.sum(res)
+    return np.sum(res)        
 
 class IntegerBounds:
     def __init__(self, xmin, xmax):
@@ -63,36 +67,92 @@ def mpc(task_requirements, battery_levels, battery_status, discharge_rate, charg
     
     return np.round(res.x).astype(int)
 
-def validate_allocation(allocation, constrained_allocation):
-    if constrained_allocation is None:
+class BruteForceAllocation:
+    def __init__(self, n_robots):
+        self.n_robots = n_robots
+        self.alloc_options = self.custom_powerset()
+        
+    def custom_powerset(self):
+        print("Computing powerset...")
+        res = []
+        current = [0] * self.n_robots
+        self._rec_custom_powerser(current, res, 0)
+        return res
+    
+    def print_powerset(self):
+        for i in self.alloc_options:
+            print(i)
+    
+    def _rec_custom_powerser(self, current, result, index):
+        if index == self.n_robots:
+            result.append(copy.deepcopy(current))
+            return
+
+        for i in range(self.n_robots):
+            current[index] = i
+            if self._is_consistent(current, index + 1):
+                self._rec_custom_powerser(current, result, index + 1)
+    
+    def _is_consistent(self, current, index):
+        return self._validate_count(current, index)
+    
+    def _validate_with_constraints(self, allocation, constrained_allocation, index=None):
+        if constrained_allocation is None:
+            return True
+        
+        count = 0
+        for i, j in zip(allocation, constrained_allocation):
+            if j != -1 and i != j:
+                return False
+            count += 1
+            if index is not None and count == index:
+                break
+        
         return True
     
-    for i, j in zip(allocation, constrained_allocation):
-        if j != -1 and i != j:
-            return False
+    def _validate_count(self, current, index):
+        occurrences = [0 for _ in range(self.n_robots)]
+        for i in range(index):
+            occurrences[current[i]] += 1
+            
+        for id1, o in enumerate(occurrences):
+            # if a robot is used more than twice, return False
+            # NOTE: this is a constraint that can be removed
+            if o > 2:
+                return False
+            
+            # if a robot is used twice, it must be used once by the same robot
+            if o == 2:
+                found = False
+                for j in range(index):
+                    if current[j] == id1 and j == id1:
+                        found = True
+                if not found:
+                    return False
+        
+        return True
     
-    return True
+    def find_best_allocation(self, task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants, costrained_allocation=None):
+        best_cost = np.inf
+        best_solution = None
+        battery_levels_backup = np.copy(battery_levels)
+        battery_status_backup = np.copy(battery_status)
 
-def brute_force(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants, costrained_allocation=None):
-    best_cost = np.inf
-    best_solution = None
-    battery_levels_backup = np.copy(battery_levels)
-    battery_status_backup = np.copy(battery_status)
+        for p in self.alloc_options:
+            #offloading_decision = list(p)
+            if not self._validate_with_constraints(p, costrained_allocation):
+                continue
 
-    perm = permutations([i for i in range(len(battery_levels))])
-    for p in perm:
-        offloading_decision = list(p)
-        if not validate_allocation(offloading_decision, costrained_allocation):
-            continue
-        battery_levels = np.copy(battery_levels_backup)
-        battery_status = np.copy(battery_status_backup)
-        cost = optimize(offloading_decision, task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants)
-        if cost < best_cost:
-            best_cost = cost
-            best_solution = offloading_decision
+            battery_levels = np.copy(battery_levels_backup)
+            battery_status = np.copy(battery_status_backup)
+            cost = optimize(p, task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants)
+            if cost < best_cost:
+                best_cost = cost
+                best_solution = p
 
-    # how to read: task (owned by robot) i is executed by robot[best_solution[i]]
-    return best_solution
+        # how to read: task (owned by robot) i is executed by robot[best_solution[i]]
+        return best_solution
+    
 
 if __name__ == "__main__":
     # Example usage
@@ -101,8 +161,9 @@ if __name__ == "__main__":
     battery_status = ['operating', 'operating']
     discharge_rate = [5, 5]
     charge_rate = [5, 5]
+    costrained_allocation = [-1, 1]
     time_instants = 5
 
-    #offloading_decision = mpc(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants)
-    offloading_decision_brute = brute_force(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants, costrained_allocation=[0, -1])
-    print(offloading_decision_brute)
+    bf = BruteForceAllocation(8)
+        
+    print(bf.find_best_allocation(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants, costrained_allocation))

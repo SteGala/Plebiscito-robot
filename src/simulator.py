@@ -1,10 +1,11 @@
 from src.robot import Robot
-from src.mpc import brute_force
+from src.mpc import BruteForceAllocation
 import random
 import numpy as np
 import pandas as pd
 from src.utils import compute_adjacency_matrix, dijkstra
 import os
+from tqdm import tqdm
 
 import matplotlib.pyplot as plt
 
@@ -20,6 +21,9 @@ class Simulator:
         self.prediction_horizon = prediction_horizon
         self.weight_battery = weight_battery
         self.weight_offloading = weight_offloading
+        
+        if optimize_computation_frequency is not None:
+            self.allocator = BruteForceAllocation(n_robots)
         
         self.initialize_stats()
         
@@ -56,7 +60,7 @@ class Simulator:
         for r in self.robots:
             res[r.name] = []
             
-        for ep in range(epochs):
+        for ep in tqdm(range(epochs), desc = 'Simulating epoch: '):
             available_robots_ids = []
             
             # Iterate over each robot
@@ -85,7 +89,7 @@ class Simulator:
             if self.move_computation_enabled:
                 self.move_computation(available_robots_ids)
                 
-            if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0 and ep != 0:
+            if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0:
                 self.optimize_computation()
                 
             for r in self.robots:
@@ -121,7 +125,7 @@ class Simulator:
             if r.get_status() == "charging" and r.get_hosted_task() is not None:
                 constrained_allocation[r.get_hosted_task().get_from().get_name()] = id
         
-        offloading_decision_brute = brute_force(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, self.optimize_computation_frequency, costrained_allocation=constrained_allocation)
+        offloading_decision_brute = self.allocator.find_best_allocation(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, self.optimize_computation_frequency, costrained_allocation=constrained_allocation)
         
         for r in self.robots:
             r.unhost()
