@@ -32,14 +32,16 @@ class Simulator:
         
         # Create n_robots instances of the Robot class with random battery levels, charge rates, and discharge rates
         for i in range(config["n_robots"]):
-            discharge_rate = config["discharge_rate"]
-            charge_rate = config["charge_rate"]
-            total_battery = config["total_battery"]
-            task_demand = config["AI_computation"]
-            if discharge_rate == 0:
-                self.robots.append(Robot(i, battery_level=random.randint(int(total_battery*0.15), int(total_battery*0.85)), total_battery=total_battery, charge_rate=total_battery//charge_rate, disharge_rate=discharge_rate, task_demand=task_demand))
+            dr = config["discharge_rate"]
+            cr = tb//config["charge_rate"]
+            tb = config["total_battery"]
+            td = config["AI_computation"]
+            bl = random.randint(int(tb*0.15), int(tb*0.85))
+            
+            if dr == 0:
+                self.robots.append(Robot(i, battery_level=bl, total_battery=tb, charge_rate=cr, disharge_rate=dr, task_demand=td))
             else:
-                self.robots.append(Robot(i, battery_level=random.randint(int(total_battery*0.15), int(total_battery*0.85)), total_battery=total_battery, charge_rate=total_battery//charge_rate, disharge_rate=total_battery//discharge_rate, task_demand=task_demand)) #disharge_rate=random.randint(1, 2)
+                self.robots.append(Robot(i, battery_level=bl, total_battery=tb, charge_rate=cr, disharge_rate=tb//dr, task_demand=td)) #disharge_rate=random.randint(1, 2)
             
         if probability != 1:
             print("WARNING: The code has not being tested with probability != 1. Unexpected results may arise.")
@@ -47,7 +49,7 @@ class Simulator:
         # Compute probability-defined adjacency matrix 
         self.adjacency_matrix = compute_adjacency_matrix(config["n_robots"], probability)   
         
-        print(f"Initialized simulation with {total_battery} total battery, {config["n_robots"]} robots, charge rate {charge_rate}, discharge rate {discharge_rate}.")
+        print(f"Initialized simulation with {tb} total battery, {config["n_robots"]} robots, charge rate {cr}, discharge rate {dr}.")
         
     def initialize_stats(self):
         """
