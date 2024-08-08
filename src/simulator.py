@@ -6,38 +6,48 @@ import pandas as pd
 from src.utils import compute_adjacency_matrix, dijkstra
 import os
 from tqdm import tqdm
+import sys
 
 import matplotlib.pyplot as plt
 
 class Simulator:
-    def __init__(self, sim_name, n_robots, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_enabled=True, optimize_computation_frequency=None, target_battery_fleet=0.5, prediction_horizon=5, weight_battery=1, weight_offloading=0.1) -> None:
+    def __init__(self, run_number, sim_name, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_enabled=True, optimize_computation_frequency=None, config=None) -> None:
+        if config is None:
+            print("ERROR: No configuration provided.")
+            sys.exit(1)
+        
         self.charging_threshold = charging_threshold
         self.operating_threshold = operating_threshold
         self.robots = []
         self.move_computation_enabled = move_computation_enabled
         self.optimize_computation_frequency = optimize_computation_frequency
         self.sim_name = "res/" + sim_name
-        self.target_battery_fleet = target_battery_fleet
-        self.prediction_horizon = prediction_horizon
-        self.weight_battery = weight_battery
-        self.weight_offloading = weight_offloading
         
         if optimize_computation_frequency is not None:
-            self.allocator = BruteForceAllocation(n_robots)
+            self.allocator = BruteForceAllocation(config["n_robots"])
         
         self.initialize_stats()
         
-        random.seed(n_robots)
+        random.seed(run_number)
         
         # Create n_robots instances of the Robot class with random battery levels, charge rates, and discharge rates
-        for i in range(n_robots):
-            self.robots.append(Robot(i, battery_level=random.randint(200, 800), total_battery=1000, charge_rate=random.randint(4, 8), disharge_rate=random.randint(1, 2))) #disharge_rate=random.randint(1, 2)
+        for i in range(config["n_robots"]):
+            discharge_rate = config["discharge_rate"]
+            charge_rate = config["charge_rate"]
+            total_battery = config["total_battery"]
+            task_demand = config["AI_computation"]
+            if discharge_rate == 0:
+                self.robots.append(Robot(i, battery_level=random.randint(int(total_battery*0.15), int(total_battery*0.85)), total_battery=total_battery, charge_rate=total_battery//charge_rate, disharge_rate=discharge_rate, task_demand=task_demand))
+            else:
+                self.robots.append(Robot(i, battery_level=random.randint(int(total_battery*0.15), int(total_battery*0.85)), total_battery=total_battery, charge_rate=total_battery//charge_rate, disharge_rate=total_battery//discharge_rate, task_demand=task_demand)) #disharge_rate=random.randint(1, 2)
             
         if probability != 1:
             print("WARNING: The code has not being tested with probability != 1. Unexpected results may arise.")
         
         # Compute probability-defined adjacency matrix 
-        self.adjacency_matrix = compute_adjacency_matrix(n_robots, probability)   
+        self.adjacency_matrix = compute_adjacency_matrix(config["n_robots"], probability)   
+        
+        print(f"Initialized simulation with {total_battery} total battery, {config["n_robots"]} robots, charge rate {charge_rate}, discharge rate {discharge_rate}.")
         
     def initialize_stats(self):
         """

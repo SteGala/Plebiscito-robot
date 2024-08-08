@@ -1,7 +1,7 @@
 from src.task import Task
 
 class Robot:
-    def __init__(self, name, battery_level=50, total_battery=100, status="operating", charge_rate=5, disharge_rate=1):
+    def __init__(self, name, battery_level=50, total_battery=100, status="operating", charge_rate=5, disharge_rate=1, task_demand=1):
         self.name = int(name)
         self.battery_level = battery_level
         self.total_battery = total_battery
@@ -9,7 +9,7 @@ class Robot:
         self.charge_rate = charge_rate
         self.discharge_rate = disharge_rate
         self.hosted_task = None
-        self.self_task = Task(self, 1)
+        self.self_task = Task(self, task_demand)
         self.self_task.assign_to(self)
         
         self.initialize_stats()
@@ -119,8 +119,8 @@ class Robot:
             self.battery_level += self.charge_rate
             
             # if the robot is hosting a task, consume the battery
-            if self.hosted_task is not None:
-                self.battery_level -= self.hosted_task.get_consumption()
+            # if self.hosted_task is not None:
+            #     self.battery_level -= self.hosted_task.get_consumption()
                                 
             # TODO: might be removed in future. If the device is charging we can assume that the self task is not executed
             # if not self.has_offloaded():
