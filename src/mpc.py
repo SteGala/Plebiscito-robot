@@ -73,7 +73,7 @@ class BruteForceAllocation:
         self.alloc_options = self.custom_powerset()
         
     def custom_powerset(self):
-        print("Computing powerset...")
+        #print("Computing powerset...")
         res = []
         current = [0] * self.n_robots
         self._rec_custom_powerser(current, res, 0)

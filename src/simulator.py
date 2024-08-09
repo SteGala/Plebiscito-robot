@@ -33,15 +33,15 @@ class Simulator:
         # Create n_robots instances of the Robot class with random battery levels, charge rates, and discharge rates
         for i in range(config["n_robots"]):
             dr = config["discharge_rate"]
-            cr = tb//config["charge_rate"]
             tb = config["total_battery"]
+            cr = config["charge_rate"]
             td = config["AI_computation"]
             bl = random.randint(int(tb*0.15), int(tb*0.85))
             
             if dr == 0:
-                self.robots.append(Robot(i, battery_level=bl, total_battery=tb, charge_rate=cr, disharge_rate=dr, task_demand=td))
+                self.robots.append(Robot(i, battery_level=bl, total_battery=tb, charge_rate=cr, disharge_rate=dr, task_demand=td, status=random.choice(["charging", "operating"])))
             else:
-                self.robots.append(Robot(i, battery_level=bl, total_battery=tb, charge_rate=cr, disharge_rate=tb//dr, task_demand=td)) #disharge_rate=random.randint(1, 2)
+                self.robots.append(Robot(i, battery_level=bl, total_battery=tb, charge_rate=cr, disharge_rate=dr, task_demand=td, status=random.choice(["charging", "operating"])))
             
         if probability != 1:
             print("WARNING: The code has not being tested with probability != 1. Unexpected results may arise.")
