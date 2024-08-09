@@ -206,32 +206,27 @@ class Simulator:
         n_hosted = {} 
         n_computation = {}
         
+        d = {}
+        
         for _, robot in enumerate(self.robots):
             stat = robot.get_stats()
-            offloaded_computing[robot.name] = stat["offloaded_computing"]
-            operation_time[robot.name] = stat["operation_time"]
-            charging_time[robot.name] = stat["charging_time"]
-            n_charging[robot.name] = stat["n_charging"]
-            n_operating[robot.name] = stat["n_operating"]
-            n_offloaded[robot.name] = stat["n_offloaded"]
-            n_hosted[robot.name] = stat["n_hosted"]
-            n_computation[robot.name] = stat["computation"]
+            
+            d["robot_" + str(robot.name) + "_offloaded_computing"] = stat["offloaded_computing"]
+            d["robot_" + str(robot.name) + "_operation_time"] = stat["operation_time"]
+            d["robot_" + str(robot.name) + "_charging_time"] = stat["charging_time"]
+            d["robot_" + str(robot.name) + "_n_charging"] = stat["n_charging"]
+            d["robot_" + str(robot.name) + "_n_operating"] = stat["n_operating"]
+            d["robot_" + str(robot.name) + "_n_offloaded"] = stat["n_offloaded"]
+            d["robot_" + str(robot.name) + "_n_hosted"] = stat["n_hosted"]
+            d["robot_" + str(robot.name) + "_n_computation"] = stat["computation"]
             
         # Create the directory if it doesn't exist
         if not os.path.exists(self.sim_name):
             os.makedirs(self.sim_name)
 
         # Save the dataframes as CSV files in the directory
-        pd.DataFrame([offloaded_computing]).to_csv(f"{self.sim_name}/offloaded_computing.csv", index=False)
-        pd.DataFrame([operation_time]).to_csv(f"{self.sim_name}/operation_time.csv", index=False)
-        pd.DataFrame([charging_time]).to_csv(f"{self.sim_name}/charging_time.csv", index=False)
-        pd.DataFrame([n_charging]).to_csv(f"{self.sim_name}/n_charging.csv", index=False)
-        pd.DataFrame([n_operating]).to_csv(f"{self.sim_name}/n_operating.csv", index=False)
-        pd.DataFrame([n_offloaded]).to_csv(f"{self.sim_name}/n_offloaded.csv", index=False)
-        pd.DataFrame([n_hosted]).to_csv(f"{self.sim_name}/n_hosted.csv", index=False)
-        pd.DataFrame([n_computation]).to_csv(f"{self.sim_name}/n_computation.csv", index=False)
-        
-        pd.DataFrame([self.stats]).to_csv(f"{self.sim_name}/simulation_stats.csv", index=False)
+        pd.DataFrame([d]).to_csv(f"{self.sim_name}/simulation_stats.csv", index=False)
+        pd.DataFrame([self.stats]).to_csv(f"{self.sim_name}/missed_chances.csv", index=False)
              
     def plot_results(self, data):
         """
