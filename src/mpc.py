@@ -14,7 +14,7 @@ def advance_time(battery_levels, battery_status, offloading_decision, task_requi
             battery_levels[id] -= discharge_rate[id]
             
         for j, task in enumerate(offloading_decision):
-            if int(task) == id:
+            if int(task) == id and status == 'operating':
                 battery_levels[id] -= task_requirements[j]
     
     for id, level in enumerate(battery_levels):
@@ -82,6 +82,9 @@ class BruteForceAllocation:
     def print_powerset(self):
         for i in self.alloc_options:
             print(i)
+            
+    def print_powerset_count(self):
+        print(len(self.alloc_options))
     
     def _rec_custom_powerser(self, current, result, index):
         if index == self.n_robots:
@@ -129,6 +132,10 @@ class BruteForceAllocation:
                         found = True
                 if not found:
                     return False
+                
+            # if o == 1:
+            #     if id1 != current[id1]:
+            #         return False
         
         return True
     
@@ -164,6 +171,7 @@ if __name__ == "__main__":
     costrained_allocation = [-1, 1]
     time_instants = 5
 
-    bf = BruteForceAllocation(8)
-        
-    print(bf.find_best_allocation(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants, costrained_allocation))
+    bf = BruteForceAllocation(4)
+    bf.print_powerset_count()
+    # bf.print_powerset()
+    #print(bf.find_best_allocation(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants, costrained_allocation))

@@ -11,7 +11,7 @@ import sys
 import matplotlib.pyplot as plt
 
 class Simulator:
-    def __init__(self, run_number, sim_name, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_enabled=True, optimize_computation_frequency=None, config=None) -> None:
+    def __init__(self, run_number, sim_name, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_enabled=True, optimize_computation_frequency=None, optimize_computation_window=10, config=None) -> None:
         if config is None:
             print("ERROR: No configuration provided.")
             sys.exit(1)
@@ -22,6 +22,7 @@ class Simulator:
         self.move_computation_enabled = move_computation_enabled
         self.optimize_computation_frequency = optimize_computation_frequency
         self.sim_name = "res/" + sim_name
+        self.optimize_computation_window = optimize_computation_window
         
         if optimize_computation_frequency is not None:
             self.allocator = BruteForceAllocation(config["n_robots"])
@@ -37,11 +38,14 @@ class Simulator:
             cr = config["charge_rate"]
             td = config["AI_computation"]
             bl = random.randint(int(tb*0.15), int(tb*0.85))
+            # bl = tb
             
             if dr == 0:
                 self.robots.append(Robot(i, battery_level=bl, total_battery=tb, charge_rate=cr, disharge_rate=dr, task_demand=td, status=random.choice(["charging", "operating"])))
             else:
                 self.robots.append(Robot(i, battery_level=bl, total_battery=tb, charge_rate=cr, disharge_rate=dr, task_demand=td, status=random.choice(["charging", "operating"])))
+                # self.robots.append(Robot(i, battery_level=bl, total_battery=tb, charge_rate=cr, disharge_rate=dr, task_demand=td, status="operating"))
+
             
         if probability != 1:
             print("WARNING: The code has not being tested with probability != 1. Unexpected results may arise.")
@@ -49,7 +53,7 @@ class Simulator:
         # Compute probability-defined adjacency matrix 
         self.adjacency_matrix = compute_adjacency_matrix(config["n_robots"], probability)   
         
-        print(f"Initialized simulation with {tb} total battery, {config["n_robots"]} robots, charge rate {cr}, discharge rate {dr}.")
+        print(f"Initialized simulation with {tb} total battery, {config['n_robots']} robots, charge rate {cr}, discharge rate {dr}.")
         
     def initialize_stats(self):
         """
@@ -58,6 +62,11 @@ class Simulator:
         self.stats = {}
         self.stats["wasted_charging"] = 0
         self.stats["wasted_operating"] = 0
+        
+        self.stats_status_robot = {}
+        self.stats_status_robot["epoch"] = []
+        self.stats_status_robot["charging"] = []
+        self.stats_status_robot["operating"] = []
             
     def run(self, epochs):
         """
@@ -102,7 +111,7 @@ class Simulator:
                 self.move_computation(available_robots_ids)
                 
             if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0:
-                self.optimize_computation()
+                self.optimize_computation(ep)
                 
             for r in self.robots:
                 r.update_computation()
@@ -125,7 +134,7 @@ class Simulator:
             print(r, "\t", r.get_self_task(), "\t", r.get_hosted_task())
         print()
     
-    def optimize_computation(self):
+    def optimize_computation(self, ep):
         task_requirements = [r.get_self_task().get_consumption() for r in self.robots]
         battery_levels = [r.get_battery_level() for r in self.robots]
         battery_status = [r.get_battery_status() for r in self.robots]
@@ -133,11 +142,13 @@ class Simulator:
         charge_rate = [r.get_charge_rate() for r in self.robots]
         constrained_allocation = [-1 for _ in range(len(self.robots))]
         
+        #self.print_infrastructure(ep)
+        
         for id, r in enumerate(self.robots):
             if r.get_status() == "charging" and r.get_hosted_task() is not None:
                 constrained_allocation[r.get_hosted_task().get_from().get_name()] = id
         
-        offloading_decision_brute = self.allocator.find_best_allocation(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, self.optimize_computation_frequency, costrained_allocation=constrained_allocation)
+        offloading_decision_brute = self.allocator.find_best_allocation(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, self.optimize_computation_window, costrained_allocation=constrained_allocation)
         
         for r in self.robots:
             r.unhost()
@@ -148,9 +159,7 @@ class Simulator:
                 self.robots[i].offload(self.robots[id])
                 self.robots[id].host(self.robots[i].get_self_task())
         
-        # for r in self.robots:
-            # print(r, r.get_self_task(), r.get_hosted_task())
-        # print()
+        #self.print_infrastructure(ep)
         
         return
 
@@ -187,30 +196,34 @@ class Simulator:
         """
         Update the simulation statistics.
         """
+        charging = 0
+        operating = 0
+        
         for robot in self.robots:
             if robot.get_status() == "charging" and not robot.is_hosting():
                 self.stats["wasted_charging"] += 1
             elif robot.get_status() == "operating" and not robot.has_offloaded():
                 self.stats["wasted_operating"] += 1
+                
+            if robot.get_status() == "charging":
+                charging += 1
+            elif robot.get_status() == "operating":
+                operating += 1
+                
+        self.stats_status_robot["epoch"].append(time_instant)
+        self.stats_status_robot["charging"].append(charging)
+        self.stats_status_robot["operating"].append(operating)
 
     def dump_report(self):
         """
         Dump the simulation report to CSV files.
-        """
-        offloaded_computing = {}
-        operation_time = {}
-        charging_time = {}
-        n_charging = {} 
-        n_operating = {} 
-        n_offloaded = {} 
-        n_hosted = {} 
-        n_computation = {}
-        
+        """        
         d = {}
         
         for _, robot in enumerate(self.robots):
             stat = robot.get_stats()
             
+            d["n_robot"] = len(self.robots)
             d["robot_" + str(robot.name) + "_offloaded_computing"] = stat["offloaded_computing"]
             d["robot_" + str(robot.name) + "_operation_time"] = stat["operation_time"]
             d["robot_" + str(robot.name) + "_charging_time"] = stat["charging_time"]
@@ -227,6 +240,7 @@ class Simulator:
         # Save the dataframes as CSV files in the directory
         pd.DataFrame([d]).to_csv(f"{self.sim_name}/simulation_stats.csv", index=False)
         pd.DataFrame([self.stats]).to_csv(f"{self.sim_name}/missed_chances.csv", index=False)
+        pd.DataFrame(self.stats_status_robot).to_csv(f"{self.sim_name}/robot_status.csv", index=False)
              
     def plot_results(self, data):
         """
