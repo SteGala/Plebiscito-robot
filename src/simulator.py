@@ -1,9 +1,10 @@
+import copy
 from src.robot import Robot
 from src.mpc import BruteForceAllocation
 import random
 import numpy as np
 import pandas as pd
-from src.utils import compute_adjacency_matrix, dijkstra
+from src.utils import compute_adjacency_matrix, progress_simulation
 import os
 from tqdm import tqdm
 import sys
@@ -82,36 +83,10 @@ class Simulator:
             res[r.name] = []
             
         for ep in tqdm(range(epochs), desc = 'Simulating epoch: '):
-            available_robots_ids = []
-            
-            # Iterate over each robot
-            for id, robot in enumerate(self.robots):
-                battery = robot.tick()
-                res[robot.name].append(battery)
-                r_status = robot.get_status()
-                
-                # If battery level is below charging threshold and the robot is not already charging, start charging
-                if battery <= self.charging_threshold and r_status != "charging":
-                    #print("ch", id)
-                    robot.charge()
-                    available_robots_ids.append(id)
-                
-                # If battery level is above operating threshold and the robot is not already operating, set it to operate
-                elif battery >= self.operating_threshold and r_status != "operating":
-                    # Set the robot to operate
-                    #print("op", id)
-                    robot.operate()
-                else:
-                    # If the robot is not hosting a task and it is currently charging, add it to the available robots list
-                    if not robot.is_hosting() and r_status == "charging":
-                        available_robots_ids.append(id)
-                                
-            # Use available robots to host tasks
-            if self.move_computation_enabled:
-                self.move_computation(available_robots_ids)
+            progress_simulation(res, self.robots, self.charging_threshold, self.operating_threshold, self.move_computation_enabled, self.adjacency_matrix)
                 
             if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0:
-                self.optimize_computation(ep)
+                self.optimize_computation()
                 
             for r in self.robots:
                 r.update_computation()
@@ -134,21 +109,17 @@ class Simulator:
             print(r, "\t", r.get_self_task(), "\t", r.get_hosted_task())
         print()
     
-    def optimize_computation(self, ep):
-        task_requirements = [r.get_self_task().get_consumption() for r in self.robots]
-        battery_levels = [r.get_battery_level() for r in self.robots]
-        battery_status = [r.get_battery_status() for r in self.robots]
-        discharge_rate = [r.get_discharge_rate() for r in self.robots]
-        charge_rate = [r.get_charge_rate() for r in self.robots]
+    def optimize_computation(self):
         constrained_allocation = [-1 for _ in range(len(self.robots))]
-        
-        #self.print_infrastructure(ep)
-        
+                
         for id, r in enumerate(self.robots):
-            if r.get_status() == "charging" and r.get_hosted_task() is not None:
-                constrained_allocation[r.get_hosted_task().get_from().get_name()] = id
+            if r.get_status() == "charging":
+                if r.get_hosted_task() is not None:
+                    constrained_allocation[r.get_hosted_task().get_from().get_name()] = id
+                constrained_allocation[id] = id
         
-        offloading_decision_brute = self.allocator.find_best_allocation(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, self.optimize_computation_window, costrained_allocation=constrained_allocation)
+        #self.print_infrastructure(0)
+        offloading_decision_brute = self.allocator.find_best_allocation(self.optimize_computation_window, copy.deepcopy(self.robots), self.charging_threshold, self.operating_threshold, self.move_computation_enabled, self.adjacency_matrix, constrained_allocation)
         
         for r in self.robots:
             r.unhost()
@@ -158,39 +129,10 @@ class Simulator:
             if self.robots[id] != self.robots[i]:
                 self.robots[i].offload(self.robots[id])
                 self.robots[id].host(self.robots[i].get_self_task())
-        
-        #self.print_infrastructure(ep)
-        
+                
+        #self.print_infrastructure(0)
+                
         return
-
-    def move_computation(self, available_robots_ids):
-        """
-        Perform move computation for available robots.
-
-        Args:
-            available_robots_ids (list): List of available robot IDs.
-        """
-        for i in available_robots_ids:
-            robot = self.robots[i]
-            
-            # Skip if the robot is charging or already hosting a task
-            if robot.is_hosting():
-                continue
-                
-            # Find the nearest robot that is operating
-            distances = dijkstra(self.adjacency_matrix, i)
-                
-            found = False
-            for _, ids in distances.items():
-                if found:
-                    break
-                    
-                for id in ids:
-                    if not self.robots[id].has_offloaded() and self.robots[id].get_status() == "operating":
-                        self.robots[id].offload(robot)
-                        assert robot.host(self.robots[id].get_self_task()) != False
-                        found = True
-                        break
 
     def update_stats(self, time_instant):
         """

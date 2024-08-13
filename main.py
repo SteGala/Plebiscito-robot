@@ -3,7 +3,7 @@ from src.simulator import Simulator
 # Configurations from Chatgpt
 
 small_config = {
-    "n_robot": 8,
+    "n_robots": 8,
     "charge_rate": 17, # 17Wh
     "discharge_rate": 15, # 15Wh 
     "total_battery": 35*60, # typically 35Wh then mutiply by 60 to get the total battery
@@ -11,17 +11,27 @@ small_config = {
 }
 
 medium_config = {
-    "n_robot": 8,
+    "n_robots": 7,
     "charge_rate": 65, # 65Wh
     "discharge_rate": 25, # 25Wh 
+    #"discharge_rate": 0,
     "total_battery": 220*60, # typically 220Wh then mutiply by 60 to get the total battery
     "AI_computation": 20
 }
 
+# medium_config = {
+#     "n_robots": 3,
+#     "charge_rate": 65, # 65Wh
+#     "discharge_rate": 25, # 25Wh 
+#     #"discharge_rate": 0,
+#     "total_battery": 300, # typically 220Wh then mutiply by 60 to get the total battery
+#     "AI_computation": 20
+# }
+
 # Configurations from Gemini
 
 config = {
-    "n_robot": 8,
+    "n_robots": 8,
     "charge_rate": 150, # 65Wh
     "discharge_rate": 100, # 25Wh 
     "total_battery": 250*60, # typically 220Wh then mutiply by 60 to get the total battery
@@ -32,14 +42,37 @@ config = {
 
 if __name__ == "__main__":
     n_run = 1
-    duration = 100
+    duration = 1500
     
     for i in range(n_run):
         # Run the simulation to get the values for the battery optimmization
-        s = Simulator(i, f"{i}-small-reference", move_computation_enabled=False, optimize_computation_frequency=None, config=small_config)
+        s = Simulator(i, f"reference", move_computation_enabled=False, optimize_computation_frequency=None, config=medium_config)
         s.run(duration)
         
-        s = Simulator(i, f"{i}-small-battery", move_computation_enabled=True, optimize_computation_frequency=None,config=small_config)
+        s = Simulator(i, f"battery", move_computation_enabled=True, optimize_computation_frequency=None,config=medium_config)
         s.run(duration)
+        
+        s = Simulator(i, f"battery-opt-50", move_computation_enabled=True, optimize_computation_frequency=5, optimize_computation_window=50, config=medium_config)
+        s.run(duration)
+        
+        s = Simulator(i, f"battery-opt-100", move_computation_enabled=True, optimize_computation_frequency=5, optimize_computation_window=100, config=medium_config)
+        s.run(duration)
+        
+        s = Simulator(i, f"battery-opt-150", move_computation_enabled=True, optimize_computation_frequency=5, optimize_computation_window=150, config=medium_config)
+        s.run(duration)
+        
+        s = Simulator(i, f"battery-opt-200", move_computation_enabled=True, optimize_computation_frequency=5, optimize_computation_window=200, config=medium_config)
+        s.run(duration)
+        
+        # s = Simulator(i, f"battery-opt-90", move_computation_enabled=True, optimize_computation_frequency=5, optimize_computation_window=90, config=medium_config)
+        # s.run(duration)
+        
+        # s = Simulator(i, f"battery-opt-1-100", move_computation_enabled=True, optimize_computation_frequency=1, optimize_computation_window=100, config=medium_config)
+        # s.run(duration)
+        
+        
+        
+        
+        
                 
     

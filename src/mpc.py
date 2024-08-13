@@ -4,47 +4,23 @@ from scipy.optimize import basinhopping
 from itertools import permutations
 from collections import Counter
 import time
+from src.utils import progress_simulation
 
-
-def advance_time(battery_levels, battery_status, offloading_decision, task_requirements, discharge_rate, charge_rate):
-    for id, status in enumerate(battery_status):
-        if status == 'charging':
-            battery_levels[id] += charge_rate[id]
-        elif status == 'operating':
-            battery_levels[id] -= discharge_rate[id]
-            
-        for j, task in enumerate(offloading_decision):
-            if int(task) == id and status == 'operating':
-                battery_levels[id] -= task_requirements[j]
-    
-    for id, level in enumerate(battery_levels):
-        if level <= 0:
-            battery_levels[id] = 0
-            battery_status[id] = 'charging'
-        elif level >= 100:
-            battery_levels[id] = 100
-            battery_status[id] = 'operating'
-            
-    return battery_levels, battery_status
-
-def optimize(offloading_decision, task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants):
-    # battery_levels = np.copy(battery_levels)
-    # battery_status = np.copy(battery_status)
+def optimize(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
     res = []
-    #print(offloading_decision)
 
     for _ in range(time_instants):
         charging = 0
         operating = 0
-        for b in battery_status:
-            if b == 'charging':
+        for r in robots:
+            if r.get_status() == "charging":
                 charging += 1
-            elif b == 'operating':
-                operating += 1
+            elif r.get_status() == "operating":
+                operating += 1 
 
         res.append((charging - operating) ** 2)
-        battery_levels, battery_status = advance_time(battery_levels, battery_status, offloading_decision, task_requirements, discharge_rate, charge_rate)
-
+        progress_simulation({}, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix)
+    
     return np.sum(res)        
 
 class IntegerBounds:
@@ -139,23 +115,31 @@ class BruteForceAllocation:
         
         return True
     
-    def find_best_allocation(self, task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants, costrained_allocation=None):
+    def find_best_allocation(self, time_instants, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, costrained_allocation=None):
         best_cost = np.inf
         best_solution = None
-        battery_levels_backup = np.copy(battery_levels)
-        battery_status_backup = np.copy(battery_status)
+        robots_backup = copy.deepcopy(robots)
 
-        for p in self.alloc_options:
+        for alloc in self.alloc_options:
             #offloading_decision = list(p)
-            if not self._validate_with_constraints(p, costrained_allocation):
+            if not self._validate_with_constraints(alloc, costrained_allocation):
                 continue
 
-            battery_levels = np.copy(battery_levels_backup)
-            battery_status = np.copy(battery_status_backup)
-            cost = optimize(p, task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants)
+            robots = copy.deepcopy(robots_backup)
+            
+            for r in robots:
+                r.unhost()
+                r.unoffload()
+                
+            for i, id in enumerate(alloc):     
+                if robots[id] != robots[i]:
+                    robots[i].offload(robots[id])
+                    robots[id].host(robots[i].get_self_task())                
+            
+            cost = optimize(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
             if cost < best_cost:
                 best_cost = cost
-                best_solution = p
+                best_solution = alloc
 
         # how to read: task (owned by robot) i is executed by robot[best_solution[i]]
         return best_solution
