@@ -1,9 +1,6 @@
 import copy
 import numpy as np
 from scipy.optimize import basinhopping
-from itertools import permutations
-from collections import Counter
-import time
 from src.utils import progress_simulation
 
 def optimize(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
@@ -51,7 +48,7 @@ class BruteForceAllocation:
     def custom_powerset(self):
         #print("Computing powerset...")
         res = []
-        current = [0] * self.n_robots
+        current = [-1] * self.n_robots
         self._rec_custom_powerser(current, res, 0)
         return res
     
@@ -73,7 +70,7 @@ class BruteForceAllocation:
                 self._rec_custom_powerser(current, result, index + 1)
     
     def _is_consistent(self, current, index):
-        return self._validate_count(current, index)
+        return self._validate_count(current, index) and self.__check_for_loop(current, index)
     
     def _validate_with_constraints(self, allocation, constrained_allocation, index=None):
         if constrained_allocation is None:
@@ -87,6 +84,23 @@ class BruteForceAllocation:
             if index is not None and count == index:
                 break
         
+        return True
+    
+    def __check_for_loop(self, current, index):
+        for i in range(index):
+            starting_point = i
+            id = current[i]
+            if starting_point == id:
+                continue # no loop if the robot is hosting itself
+            
+            while True:
+                if id == current[id]:
+                    break
+                id = current[id]
+                if id == -1:
+                    break
+                if id == starting_point:
+                    return False
         return True
     
     def _validate_count(self, current, index):
@@ -157,5 +171,5 @@ if __name__ == "__main__":
 
     bf = BruteForceAllocation(4)
     bf.print_powerset_count()
-    # bf.print_powerset()
+    bf.print_powerset()
     #print(bf.find_best_allocation(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants, costrained_allocation))
