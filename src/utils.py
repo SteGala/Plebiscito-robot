@@ -1,63 +1,6 @@
 import numpy as np
 import heapq
 
-def progress_simulation(res, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix):
-    available_robots_ids = []
-        
-    # Iterate over each robot
-    for id, robot in enumerate(robots):
-        battery = robot.tick()
-        if robot.name not in res:
-            res[robot.name] = []
-        res[robot.name].append(battery)
-        r_status = robot.get_status()
-            
-        # If battery level is below charging threshold and the robot is not already charging, start charging
-        if battery <= charging_threshold and r_status != "charging":
-            robot.charge()
-            available_robots_ids.append(id)    
-        # If battery level is above operating threshold and the robot is not already operating, set it to operate
-        elif battery >= operating_threshold and r_status != "operating":
-            # Set the robot to operate
-            robot.operate()
-        else:
-                # If the robot is not hosting a task and it is currently charging, add it to the available robots list
-            if not robot.is_hosting() and r_status == "charging":
-                available_robots_ids.append(id)
-                            
-    # Use available robots to host tasks
-    if move_computation_enabled:
-        move_computation(available_robots_ids, robots, adjacency_matrix)
-        
-def move_computation(available_robots_ids, robots, adjacency_matrix):
-    """
-    Perform move computation for available robots.
-
-    Args:
-        available_robots_ids (list): List of available robot IDs.
-    """
-    for i in available_robots_ids:
-        robot = robots[i]
-        
-        # Skip if the robot is charging or already hosting a task
-        if robot.is_hosting():
-            continue
-            
-        # Find the nearest robot that is operating
-        distances = dijkstra(adjacency_matrix, i)
-            
-        found = False
-        for _, ids in distances.items():
-            if found:
-                break
-                
-            for id in ids:
-                if not robots[id].has_offloaded() and robots[id].get_status() == "operating":
-                    robots[id].offload(robot)
-                    assert robot.host(robots[id].get_self_task()) != False
-                    found = True
-                    break
-
 def compute_adjacency_matrix(n_robots, probability):
     adjacency_matrix = np.zeros((n_robots, n_robots))
     for i in range(n_robots):
@@ -107,3 +50,63 @@ def count_missed_offload(allocation, battery_level, status):
         if alloc == 1 and battery <= 0 and stat == 'operating':
             missed_offload += 1
     return missed_offload
+
+def tick(res, robots, operating_threshold, charging_threshold, delay_enabled):
+    available_robots_ids = []
+    target_for_operating = []
+        
+    # Iterate over each robot
+    for id, robot in enumerate(robots):
+        battery = robot.tick()
+        if robot.name not in res:
+            res[robot.name] = []
+        res[robot.name].append(battery)
+        r_status = robot.get_status()
+            
+        # If battery level is below charging threshold and the robot is not already charging, start charging
+        if battery <= charging_threshold and r_status != "charging":
+            robot.charge()
+            available_robots_ids.append(id)    
+        # If battery level is above operating threshold and the robot is not already operating, set it to operate
+        elif battery >= operating_threshold and r_status != "operating":
+            # Set the robot to operate
+            #robot.operate()
+            if len(target_for_operating) < 1 and delay_enabled:
+                target_for_operating.append(id)
+            else:
+                robot.operate()
+        else:
+            # If the robot is not hosting a task and it is currently charging, add it to the available robots list
+            if not robot.is_hosting() and r_status == "charging":
+                available_robots_ids.append(id)
+    
+    return available_robots_ids, target_for_operating
+
+def move_computation(available_robots_ids, robots, adjacency_matrix):
+    """
+    Perform move computation for available robots.
+
+    Args:
+        available_robots_ids (list): List of available robot IDs.
+    """
+    for i in available_robots_ids:
+        robot = robots[i]
+        
+        # Skip if the robot is charging or already hosting a task
+        if robot.is_hosting():
+            continue
+            
+        # Find the nearest robot that is operating
+        distances = dijkstra(adjacency_matrix, i)
+            
+        found = False
+        for _, ids in distances.items():
+            if found:
+                break
+                
+            for id in ids:
+                if not robots[id].has_offloaded() and robots[id].get_status() == "operating":
+                    robots[id].offload(robot)
+                    assert robot.host(robots[id].get_self_task()) != False
+                    found = True
+                    break

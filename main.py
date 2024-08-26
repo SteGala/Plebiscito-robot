@@ -42,34 +42,24 @@ config = {
 
 if __name__ == "__main__":
     n_run = 1
-    duration = 1500
+    duration = 10000
     
     for i in range(n_run):
         # Run the simulation to get the values for the battery optimmization
-        s = Simulator(i, f"reference", move_computation_enabled=False, optimize_computation_frequency=None, config=medium_config)
+        s = Simulator(i, f"reference", move_computation_enabled=False, config=medium_config)
         s.run(duration)
         
-        s = Simulator(i, f"battery", move_computation_enabled=True, optimize_computation_frequency=None,config=medium_config)
+        s = Simulator(i, f"battery", move_computation_enabled=True, config=medium_config)
         s.run(duration)
         
-        s = Simulator(i, f"battery-opt-50", move_computation_enabled=True, optimize_computation_frequency=5, optimize_computation_window=50, config=medium_config)
-        s.run(duration)
-        
-        s = Simulator(i, f"battery-opt-100", move_computation_enabled=True, optimize_computation_frequency=5, optimize_computation_window=100, config=medium_config)
-        s.run(duration)
-        
-        s = Simulator(i, f"battery-opt-150", move_computation_enabled=True, optimize_computation_frequency=5, optimize_computation_window=150, config=medium_config)
-        s.run(duration)
-        
-        s = Simulator(i, f"battery-opt-200", move_computation_enabled=True, optimize_computation_frequency=5, optimize_computation_window=200, config=medium_config)
-        s.run(duration)
-        
-        # s = Simulator(i, f"battery-opt-90", move_computation_enabled=True, optimize_computation_frequency=5, optimize_computation_window=90, config=medium_config)
+        # s = Simulator(i, f"delay-1-9", move_computation_enabled=True, config=medium_config, delay_operation_enabled=True)
         # s.run(duration)
         
-        # s = Simulator(i, f"battery-opt-1-100", move_computation_enabled=True, optimize_computation_frequency=1, optimize_computation_window=100, config=medium_config)
-        # s.run(duration)
+        for j in [100, 200, 300, 750]:
+            s = Simulator(i, f"battery-opt-{str(j)}", move_computation_enabled=True, optimize_computation_frequency=j, optimize_computation_window=j, config=medium_config)
+            s.run(duration)
         
+       
         
         
         
