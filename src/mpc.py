@@ -1,75 +1,50 @@
 import copy
+from enum import Enum
 import numpy as np
-from scipy.optimize import basinhopping
 from src.utils import tick, move_computation
+import sys
 
-def optimize_missed_chanches(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
-    res = []
+class AllocationPolicy(Enum):
+    BRUTE_FORCE = 1
+    MOVE1 = 2
+    MOVE2 = 3
+    MOVE3 = 4
 
-    for _ in range(time_instants):
-        charging = 0
-        operating = 0
-        for r in robots:
-            if r.get_status() == "charging":
-                charging += 1
-            elif r.get_status() == "operating":
-                operating += 1 
-
-        res.append((charging - operating) ** 2)
-        available_robots_ids, _ = tick({}, robots, operating_threshold, charging_threshold, False)
-        
-        if move_computation_enabled:
-            move_computation(available_robots_ids, robots, adjacency_matrix)
-    
-    return np.sum(res)   
-
-def optimize_operation_time(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
-    res = []
-
-    for _ in range(time_instants):
-        charging = 0
-        operating = 0
-        for r in robots:
-            if r.get_status() == "charging":
-                charging += 1
-            elif r.get_status() == "operating":
-                operating += 1 
-
-        res.append(operating)
-        available_robots_ids, _ = tick({}, robots, operating_threshold, charging_threshold, False)
-        
-        if move_computation_enabled:
-            move_computation(available_robots_ids, robots, adjacency_matrix)
-    
-    return 1/np.sum(res)
-
-class IntegerBounds:
-    def __init__(self, xmin, xmax):
-        self.xmin = np.array(xmin)
-        self.xmax = np.array(xmax)
-
-    def __call__(self, **kwargs):
-        x = kwargs["x_new"]
-        tmax = bool(np.all(x <= self.xmax))
-        tmin = bool(np.all(x >= self.xmin))
-        return tmax and tmin
-
-def mpc(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants):
-    initial_guess = [i for i in range(len(task_requirements))]
-    bounds = IntegerBounds([0] * len(task_requirements), [len(battery_levels) - 1] * len(task_requirements))
-    minimizer_kwargs = {"method": "L-BFGS-B", "args": (task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants)}
-    
-    res = basinhopping(optimize_missed_chanches, initial_guess, minimizer_kwargs=minimizer_kwargs, niter=100, accept_test=bounds)
-    
-    return np.round(res.x).astype(int)
-
-class BruteForceAllocation:
-    def __init__(self, n_robots):
+class Allocator:
+    def __init__(self, n_robots, alloc_policy=AllocationPolicy.BRUTE_FORCE):
         self.n_robots = n_robots
-        self.alloc_options = self.custom_powerset()
+        self.allocation_policy = alloc_policy
+        self.alloc_options = None
+                
+        if alloc_policy is AllocationPolicy.BRUTE_FORCE:
+            self.alloc_options = self.custom_powerset()
+            
+        # shound be computed at every optimization request. Just check if the allocation policy is consistent
+        elif alloc_policy is AllocationPolicy.MOVE1:
+            pass
+        elif alloc_policy is AllocationPolicy.MOVE2:
+            pass
+        elif alloc_policy is AllocationPolicy.MOVE3:
+            pass
+        else:
+            print(f"Allocation policy {alloc_policy} not supported")
+            sys.exit(1)
+            
+    def move_n_powerset(self, n, constrained_allocation):
+        res = []
+        current = [i for i in range(self.n_robots)]
+        
+        count = 0
+        for id, i in enumerate(constrained_allocation):
+            if i != -1:
+                current[id] = i
+            if i != -1 and i != id:
+                count += 1
+                 
+        self._rec_move_n_powerset(current, res, 0, n+count, constrained_allocation)
+        return res
         
     def custom_powerset(self):
-        #print("Computing powerset...")
         res = []
         current = [-1] * self.n_robots
         self._rec_custom_powerser(current, res, 0)
@@ -81,6 +56,34 @@ class BruteForceAllocation:
             
     def print_powerset_count(self):
         print(len(self.alloc_options))
+        
+    def _rec_move_n_powerset(self, current, result, index, n, costrained_allocation):
+        def is_allowed():
+            for i in range(index):
+                if costrained_allocation[i] != -1 and costrained_allocation[i] != current[i]:
+                    return False
+                
+            ret = self._validate_count(current, index+1)
+            if ret is False:
+                return False
+            
+            count = 0
+            for i in range(self.n_robots):
+                if current[i] != i:
+                    count += 1
+            if count > n:
+                return False
+            return True
+        
+        if index == self.n_robots:
+            result.append(copy.deepcopy(current))
+            return
+        
+        for i in range(self.n_robots):
+            current[index] = i
+            if is_allowed():   
+                self._rec_move_n_powerset(current, result, index + 1, n, costrained_allocation)
+            current[index] = index
     
     def _rec_custom_powerser(self, current, result, index):
         if index == self.n_robots:
@@ -165,36 +168,84 @@ class BruteForceAllocation:
     def find_best_allocation(self, time_instants, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, costrained_allocation=None):
         best_cost = np.inf
         best_solution = None
-        robots_backup = copy.deepcopy(robots)
-        best_robot = {}
+        
+        if self.alloc_options is None:
+            if self.allocation_policy is AllocationPolicy.MOVE1:
+                self.alloc_options = self.move_n_powerset(1, costrained_allocation)
+            elif self.allocation_policy is AllocationPolicy.MOVE2:
+                self.alloc_options = self.move_n_powerset(2, costrained_allocation)
+            elif self.allocation_policy is AllocationPolicy.MOVE3:
+                self.alloc_options = self.move_n_powerset(3, costrained_allocation)
+        
+        # for a in self.alloc_options:
+        #     print(a)        
+        # sys.exit(1)
         
         for alloc in self.alloc_options:
-            #offloading_decision = list(p)
             if not self._validate_with_constraints(alloc, costrained_allocation):
                 continue
             
-            rob = copy.deepcopy(robots_backup)
+            rob = copy.deepcopy(robots)
             
-            for r in robots:
+            for r in rob:
                 r.unhost()
                 r.unoffload()
                 
             for i, id in enumerate(alloc):     
-                if rob[id] != robots[i]:
-                    rob[i].offload(rob[id])
-                    rob[id].host(rob[i].get_self_task())                
+                # if rob[id] != robots[i]:
+                rob[i].offload(rob[id])
+                rob[id].host(rob[i].get_self_task())                
             
-            cost = optimize_missed_chanches(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
-            # cost = optimize_operation_time(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
+            # cost = self.optimize_missed_chanches(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
+            cost = self.optimize_operation_time(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
             if cost < best_cost:
-                best_robot = copy.deepcopy(rob)
                 best_cost = cost
                 best_solution = alloc
                 
-        # for r in best_robot:
-        #     print(r)
-        # how to read: task (owned by robot) i is executed by robot[best_solution[i]]
+        if self.allocation_policy is not AllocationPolicy.BRUTE_FORCE:
+            self.alloc_options = None
+                
         return best_solution
+    
+    def optimize_missed_chanches(self, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
+        res = []
+
+        for _ in range(time_instants):
+            charging = 0
+            operating = 0
+            for r in robots:
+                if r.get_status() == "charging":
+                    charging += 1
+                elif r.get_status() == "operating":
+                    operating += 1 
+
+            res.append((charging - operating) ** 2)
+            available_robots_ids, _ = tick({}, robots, operating_threshold, charging_threshold, False)
+            
+            if move_computation_enabled:
+                move_computation(available_robots_ids, robots, adjacency_matrix)
+        
+        return np.sum(res)   
+
+    def optimize_operation_time(self, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
+        res = []
+
+        for _ in range(time_instants):
+            charging = 0
+            operating = 0
+            for r in robots:
+                if r.get_status() == "charging":
+                    charging += 1
+                elif r.get_status() == "operating":
+                    operating += 1 
+
+            res.append(operating)
+            available_robots_ids, _ = tick({}, robots, operating_threshold, charging_threshold, False)
+            
+            if move_computation_enabled:
+                move_computation(available_robots_ids, robots, adjacency_matrix)
+        
+        return 1/np.sum(res)
     
 
 if __name__ == "__main__":
@@ -204,10 +255,19 @@ if __name__ == "__main__":
     battery_status = ['operating', 'operating']
     discharge_rate = [5, 5]
     charge_rate = [5, 5]
-    costrained_allocation = [-1, 1]
+    costrained_allocation = [-1, -1, 0, -1, -1, -1]
     time_instants = 5
 
-    bf = BruteForceAllocation(4)
-    bf.print_powerset_count()
+    # bf = Allocator(8, AllocationPolicy.BRUTE_FORCE)
+    # bf.print_powerset_count()
+    
+    bf = Allocator(6, AllocationPolicy.MOVE1)
+    bf.find_best_allocation(10, {}, 0.15, 0.85, True, [], costrained_allocation)
+    
+    # bf = Allocator(8, AllocationPolicy.MOVE2)
+    # bf.print_powerset_count()
+    
+    # bf = Allocator(8, AllocationPolicy.MOVE3)
+    # bf.print_powerset_count()
     # bf.print_powerset()
     #print(bf.find_best_allocation(task_requirements, battery_levels, battery_status, discharge_rate, charge_rate, time_instants, costrained_allocation))

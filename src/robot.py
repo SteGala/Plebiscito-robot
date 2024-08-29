@@ -26,6 +26,9 @@ class Robot:
     def get_battery_level(self):
         return self.battery_level
     
+    def get_battery_percentage(self):
+        return self.battery_level / self.total_battery
+    
     def get_battery_status(self):
         return self.status
     

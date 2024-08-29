@@ -1,8 +1,7 @@
 import copy
 from src.robot import Robot
-from src.mpc import BruteForceAllocation
+from src.mpc import Allocator, AllocationPolicy
 import random
-import numpy as np
 import pandas as pd
 from src.utils import compute_adjacency_matrix, move_computation, tick
 import os
@@ -12,7 +11,7 @@ import sys
 import matplotlib.pyplot as plt
 
 class Simulator:
-    def __init__(self, run_number, sim_name, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_enabled=True, config=None, delay_operation_enabled=False, optimize_computation_frequency=None, optimize_computation_window=50) -> None:
+    def __init__(self, run_number, sim_name, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_enabled=True, config=None, delay_operation_enabled=False, optimize_computation_frequency=None, optimize_computation_window=50, allocation_policy=AllocationPolicy.BRUTE_FORCE) -> None:
         if config is None:
             print("ERROR: No configuration provided.")
             sys.exit(1)
@@ -27,7 +26,7 @@ class Simulator:
         self.optimize_computation_window = optimize_computation_window
 
         if optimize_computation_frequency is not None:
-            self.allocator = BruteForceAllocation(config["n_robots"])
+            self.allocator = Allocator(config["n_robots"], allocation_policy)
         
         self.initialize_stats()
         
@@ -78,12 +77,16 @@ class Simulator:
             epochs (int): Number of epochs to run the simulation.
         """
         res = {}
+        self.epochs = epochs
         
         # Initialize a dictionary to store battery levels for each robot
         for r in self.robots:
             res[r.name] = []
             
         for ep in tqdm(range(epochs), desc = 'Simulating epoch: ', smoothing=0):
+            # if ep == 2200:
+            #     self.print_infrastructure(ep)
+                
             self.progress_simulation(res, self.robots, ep)
                 
             for r in self.robots:
@@ -110,9 +113,9 @@ class Simulator:
             move_computation(available_robots_ids, robots, self.adjacency_matrix)
             
         if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0:
-            self.optimize_computation()
+            self.optimize_computation(ep)
             
-    def optimize_computation(self):
+    def optimize_computation(self, ep=0):
         constrained_allocation = [-1 for _ in range(len(self.robots))]
                 
         for id, r in enumerate(self.robots):
@@ -120,12 +123,19 @@ class Simulator:
                 if r.get_hosted_task() is not None:
                     constrained_allocation[r.get_hosted_task().get_from().get_name()] = id
                 constrained_allocation[id] = id
+            # if r.get_status() == "operating" and r.get_battery_percentage() < 0.5:
+            #     constrained_allocation[id] = id
+            
+        window = min(self.optimize_computation_window, self.epochs - ep)
         
-        offloading_decision_brute = self.allocator.find_best_allocation(self.optimize_computation_window, copy.deepcopy(self.robots), self.charging_threshold, self.operating_threshold, self.move_computation_enabled, self.adjacency_matrix, constrained_allocation)
+        offloading_decision_brute = self.allocator.find_best_allocation(window, copy.deepcopy(self.robots), self.charging_threshold, self.operating_threshold, self.move_computation_enabled, self.adjacency_matrix, constrained_allocation)
         
         for r in self.robots:
             r.unhost()
             r.unoffload()
+            
+        # if ep == 2200:
+        #     print(offloading_decision_brute)
             
         for i, id in enumerate(offloading_decision_brute):     
             if self.robots[id] != self.robots[i]:
@@ -151,9 +161,7 @@ class Simulator:
         
         return all_sol
             
-    def delay_operation(self, target_for_operating, robots, duration=9):
-        rob = copy.deepcopy(robots)
-        rob_backup = copy.deepcopy(robots)
+    def delay_operation(self, target_for_operating, robots, duration=5):
         sol = self.compute_delay_solutions(target_for_operating, duration)
         cur_best = 0
         best_sol = []
@@ -164,7 +172,7 @@ class Simulator:
         # print(len(target_for_operating))
         
         for id, s in enumerate(sol):
-            rob = copy.deepcopy(rob_backup)
+            rob = copy.deepcopy(robots)
             s_backup = copy.deepcopy(s)
             cur_best = 0
             
@@ -176,9 +184,9 @@ class Simulator:
                     else:
                         rob[j].operate()
                         
-                available_robot_ids, _ = self.tick({}, rob)
+                available_robot_ids, _ = tick({}, rob, self.operating_threshold, self.charging_threshold, False)
                 if self.move_computation_enabled:
-                    self.move_computation(available_robot_ids, rob)
+                    move_computation(available_robot_ids, rob, self.adjacency_matrix)
                 
                 charging = 0
                 operating = 0
@@ -207,8 +215,7 @@ class Simulator:
     def print_infrastructure(self, ep):
         print("Epoch: ", ep)
         for r in self.robots:
-            print(r)
-            # print(r, "\t", r.get_self_task(), "\t", r.get_hosted_task())
+            print(r, "\t", r.get_self_task(), "\t", r.get_hosted_task())
         print()
 
     def update_stats(self, time_instant):
