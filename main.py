@@ -60,7 +60,7 @@ if __name__ == "__main__":
         # s.run(duration)
         
         for j in [250, 500, 750, 1000]:
-            s = Simulator(i, f"battery-opt-{str(j)}", move_computation_enabled=False, optimize_computation_frequency=1, optimize_computation_window=j, config=medium_config, allocation_policy=AllocationPolicy.MOVE1)
+            s = Simulator(i, f"battery-opt-{str(j)}-m3", move_computation_enabled=False, optimize_computation_frequency=1, optimize_computation_window=j, config=medium_config, allocation_policy=AllocationPolicy.MOVE3, num_processes=22)
             s.run(duration)
         
        

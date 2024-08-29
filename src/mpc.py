@@ -3,6 +3,7 @@ from enum import Enum
 import numpy as np
 from src.utils import tick, move_computation
 import sys
+import multiprocessing as mp
 
 class AllocationPolicy(Enum):
     BRUTE_FORCE = 1
@@ -10,8 +11,80 @@ class AllocationPolicy(Enum):
     MOVE2 = 3
     MOVE3 = 4
 
+class ProcessPool:
+    def __init__(self, n_processes) -> None:
+        self.n_processes = n_processes
+
+        self.queue = mp.Queue()
+        self.result_queue = mp.Queue()
+        self.n_submitted = 0
+
+        # Create and start the worker processes
+        self.processes = []
+        for _ in range(n_processes):
+            p = mp.Process(target=self.work, args=(self.queue, self.result_queue))
+            p.start()
+            self.processes.append(p)
+
+    def terminate(self):
+        for _ in range(self.n_processes):
+            self.queue.put(None)
+
+        for p in self.processes:
+            p.join()
+
+    def submit(self, rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, alloc, time_instants):
+        self.n_submitted += 1
+        self.queue.put({"robots": rob, "charging_threshold": charging_threshold, "operating_threshold": operating_threshold, "move_computation_enabled": move_computation_enabled, "adjacency_matrix": adjacency_matrix, "alloc": alloc, "time_instants": time_instants})
+
+    def get_best_result(self):
+        best_cost = np.inf
+        best_alloc = None
+
+        for _ in range(self.n_submitted):
+            result = self.result_queue.get()
+            if result["cost"] < best_cost:
+                best_cost = result["cost"]
+                best_alloc = result["alloc"]
+
+        self.n_submitted = 0
+
+        return best_alloc
+
+    def work(self, queue, result_queue):
+        while True:
+            # Get data from the queue
+            data = queue.get()
+
+            # If data is None, the worker will exit
+            if data is None:
+                break
+
+            rob = data["robots"]
+            charging_threshold = data["charging_threshold"]
+            operating_threshold = data["operating_threshold"]
+            move_computation_enabled = data["move_computation_enabled"]
+            adjacency_matrix = data["adjacency_matrix"]
+            alloc = data["alloc"]
+            time_instants = data["time_instants"]
+
+            for r in rob:
+                r.unhost()
+                r.unoffload()
+                
+            for i, id in enumerate(alloc):     
+                # if rob[id] != robots[i]:
+                rob[i].offload(rob[id])
+                rob[id].host(rob[i].get_self_task()) 
+
+            # cost = Allocator.optimize_missed_chanches(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
+            cost = Allocator.optimize_operation_time(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
+
+            # Push the result to the result_queue
+            result_queue.put({"alloc": alloc, "cost": cost})
+
 class Allocator:
-    def __init__(self, n_robots, alloc_policy=AllocationPolicy.BRUTE_FORCE):
+    def __init__(self, n_robots, alloc_policy=AllocationPolicy.BRUTE_FORCE, n_processes=4):
         self.n_robots = n_robots
         self.allocation_policy = alloc_policy
         self.alloc_options = None
@@ -29,6 +102,11 @@ class Allocator:
         else:
             print(f"Allocation policy {alloc_policy} not supported")
             sys.exit(1)
+
+        self.process_pool = ProcessPool(n_processes)
+
+    def terminate(self):
+        self.process_pool.terminate()
             
     def move_n_powerset(self, n, constrained_allocation):
         res = []
@@ -184,30 +262,18 @@ class Allocator:
         for alloc in self.alloc_options:
             if not self._validate_with_constraints(alloc, costrained_allocation):
                 continue
+                        
+            self.process_pool.submit(copy.deepcopy(robots), charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, alloc, time_instants)               
             
-            rob = copy.deepcopy(robots)
-            
-            for r in rob:
-                r.unhost()
-                r.unoffload()
-                
-            for i, id in enumerate(alloc):     
-                # if rob[id] != robots[i]:
-                rob[i].offload(rob[id])
-                rob[id].host(rob[i].get_self_task())                
-            
-            # cost = self.optimize_missed_chanches(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
-            cost = self.optimize_operation_time(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
-            if cost < best_cost:
-                best_cost = cost
-                best_solution = alloc
+        best_solution = self.process_pool.get_best_result()
                 
         if self.allocation_policy is not AllocationPolicy.BRUTE_FORCE:
             self.alloc_options = None
                 
         return best_solution
     
-    def optimize_missed_chanches(self, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
+    @staticmethod
+    def optimize_missed_chanches(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
         res = []
 
         for _ in range(time_instants):
@@ -227,7 +293,8 @@ class Allocator:
         
         return np.sum(res)   
 
-    def optimize_operation_time(self, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
+    @staticmethod
+    def optimize_operation_time(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
         res = []
 
         for _ in range(time_instants):

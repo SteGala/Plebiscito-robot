@@ -11,7 +11,7 @@ import sys
 import matplotlib.pyplot as plt
 
 class Simulator:
-    def __init__(self, run_number, sim_name, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_enabled=True, config=None, delay_operation_enabled=False, optimize_computation_frequency=None, optimize_computation_window=50, allocation_policy=AllocationPolicy.BRUTE_FORCE) -> None:
+    def __init__(self, run_number, sim_name, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_enabled=True, config=None, delay_operation_enabled=False, optimize_computation_frequency=None, optimize_computation_window=50, allocation_policy=AllocationPolicy.BRUTE_FORCE, num_processes=1) -> None:
         if config is None:
             print("ERROR: No configuration provided.")
             sys.exit(1)
@@ -25,8 +25,9 @@ class Simulator:
         self.optimize_computation_frequency = optimize_computation_frequency
         self.optimize_computation_window = optimize_computation_window
 
+        self.allocator = None
         if optimize_computation_frequency is not None:
-            self.allocator = Allocator(config["n_robots"], allocation_policy)
+            self.allocator = Allocator(config["n_robots"], allocation_policy, num_processes)
         
         self.initialize_stats()
         
@@ -95,6 +96,9 @@ class Simulator:
             assert self.check_infrastructure(), self.print_infrastructure(ep)
             self.update_stats(ep)
 
+        if self.allocator is not None:
+            self.allocator.terminate()
+            
         self.dump_report() 
         self.plot_results(res)
         
