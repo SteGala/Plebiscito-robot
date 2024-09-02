@@ -40,7 +40,6 @@ class Robot:
     
     def initialize_stats(self):
         self.stats = {}
-        self.stats["offloaded_computing"] = 0 # done
         self.stats["operation_time"] = 0 # done
         self.stats["charging_time"] = 0 # done
         self.stats["n_charging"] = 0 # done
@@ -48,6 +47,9 @@ class Robot:
         self.stats["n_offloaded"] = 0 # done
         self.stats["n_hosted"] = 0 # done
         self.stats["computation"] = 0 # done
+        self.stats["free_computing"] = 0 # done
+        self.stats["self_computing"] = 0 # done
+        self.stats["offload_computing"] = 0 # done
         
     def update_computation(self):
         if self.hosted_task is not None:
@@ -122,12 +124,13 @@ class Robot:
             self.battery_level += self.charge_rate
             
             # if the robot is hosting a task, consume the battery
-            # if self.hosted_task is not None:
-            #     self.battery_level -= self.hosted_task.get_consumption()
+            if self.hosted_task is not None:
+                self.stats["free_computing"] += self.hosted_task.get_consumption()
+                # self.battery_level -= self.hosted_task.get_consumption()
                                 
             # TODO: might be removed in future. If the device is charging we can assume that the self task is not executed
-            # if not self.has_offloaded():
-            #     self.battery_level -= self.self_task.get_consumption()
+            if not self.has_offloaded():
+                self.stats["self_computing"] += self.self_task.get_consumption()
                 
             # check if the battery level is greater than the total battery
             if self.battery_level > self.total_battery:
@@ -140,11 +143,11 @@ class Robot:
             # if the robot is hosting its own task, consume the battery
             if not self.has_offloaded():
                 self.battery_level -= self.self_task.get_consumption()
-            else:
-                self.stats["offloaded_computing"] += self.self_task.get_consumption()
+                self.stats["self_computing"] += self.self_task.get_consumption()
                 
             if self.hosted_task is not None:
                 self.battery_level -= self.hosted_task.get_consumption()
+                self.stats["offload_computing"] += self.hosted_task.get_consumption()
                 
         return self.battery_level / self.total_battery 
         

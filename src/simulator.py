@@ -254,7 +254,6 @@ class Simulator:
             stat = robot.get_stats()
             
             d["n_robot"] = len(self.robots)
-            d["robot_" + str(robot.name) + "_offloaded_computing"] = stat["offloaded_computing"]
             d["robot_" + str(robot.name) + "_operation_time"] = stat["operation_time"]
             d["robot_" + str(robot.name) + "_charging_time"] = stat["charging_time"]
             d["robot_" + str(robot.name) + "_n_charging"] = stat["n_charging"]
@@ -262,6 +261,9 @@ class Simulator:
             d["robot_" + str(robot.name) + "_n_offloaded"] = stat["n_offloaded"]
             d["robot_" + str(robot.name) + "_n_hosted"] = stat["n_hosted"]
             d["robot_" + str(robot.name) + "_n_computation"] = stat["computation"]
+            d["robot_" + str(robot.name) + "_free_computing"] = stat["free_computing"]
+            d["robot_" + str(robot.name) + "_self_computing"] = stat["self_computing"]
+            d["robot_" + str(robot.name) + "_offload_computing"] = stat["offload_computing"]
             
         # Create the directory if it doesn't exist
         if not os.path.exists(self.sim_name):
