@@ -1,5 +1,13 @@
+from enum import Enum
 import numpy as np
 import heapq
+import random
+
+class MoveComputationPolicy(Enum):
+    NONE = 0
+    LARGEST_BATTERY = 1
+    SMALLEST_BATTERY = 2
+    RANDOM = 3
 
 def compute_adjacency_matrix(n_robots, probability):
     adjacency_matrix = np.zeros((n_robots, n_robots))
@@ -82,7 +90,7 @@ def tick(res, robots, operating_threshold, charging_threshold, delay_enabled):
     
     return available_robots_ids, target_for_operating
 
-def move_computation(available_robots_ids, robots, adjacency_matrix):
+def move_computation(available_robots_ids, robots, adjacency_matrix, policy):
     """
     Perform move computation for available robots.
 
@@ -103,10 +111,41 @@ def move_computation(available_robots_ids, robots, adjacency_matrix):
         for _, ids in distances.items():
             if found:
                 break
+            
+            sorted_ids = sort_ids(ids, robots, policy)
                 
-            for id in ids:
+            for id in sorted_ids:
                 if not robots[id].has_offloaded() and robots[id].get_status() == "operating":
                     robots[id].offload(robot)
                     assert robot.host(robots[id].get_self_task()) != False
                     found = True
                     break
+                
+def sort_ids(ids, robots, policy):
+    if policy is MoveComputationPolicy.NONE:
+        return ids
+    
+    if policy is MoveComputationPolicy.RANDOM:
+        random.shuffle(ids)
+        return ids
+    
+    sorted_ids = []
+    if policy is MoveComputationPolicy.LARGEST_BATTERY or policy is MoveComputationPolicy.SMALLEST_BATTERY:
+        for id in ids:
+            if len(sorted_ids) == 0:
+                sorted_ids.append(id)
+            else:
+                target = None
+                for id2 in sorted_ids:
+                    if robots[id].get_battery_percentage() <= robots[id2].get_battery_percentage():
+                        target = id2
+                        break
+                if target is not None:
+                    sorted_ids.insert(target, id)
+                else:
+                    sorted_ids.append(id)
+                    
+        if policy is MoveComputationPolicy.LARGEST_BATTERY:
+            sorted_ids.reverse()
+            
+    return sorted_ids

@@ -1,18 +1,20 @@
 import copy
 from enum import Enum
 import numpy as np
-from src.utils import tick, move_computation
+from src.utils import tick, move_computation, MoveComputationPolicy
 import sys
 import multiprocessing as mp
+import cvxpy as cp
 
 class AllocationPolicy(Enum):
     BRUTE_FORCE = 1
     MOVE1 = 2
     MOVE2 = 3
     MOVE3 = 4
+    MPC = 5
 
 class ProcessPool:
-    def __init__(self, n_processes) -> None:
+    def __init__(self, n_processes, policy) -> None:
         self.n_processes = n_processes
 
         self.queue = mp.Queue()
@@ -22,7 +24,7 @@ class ProcessPool:
         # Create and start the worker processes
         self.processes = []
         for _ in range(n_processes):
-            p = mp.Process(target=self.work, args=(self.queue, self.result_queue))
+            p = mp.Process(target=self.work, args=(self.queue, self.result_queue, policy))
             p.start()
             self.processes.append(p)
 
@@ -51,7 +53,7 @@ class ProcessPool:
 
         return best_alloc
 
-    def work(self, queue, result_queue):
+    def work(self, queue, result_queue, policy):
         while True:
             # Get data from the queue
             data = queue.get()
@@ -78,19 +80,21 @@ class ProcessPool:
                 rob[id].host(rob[i].get_self_task()) 
 
             # cost = Allocator.optimize_missed_chanches(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
-            cost = Allocator.optimize_operation_time(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
-
+            cost = Allocator.optimize_operation_time(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, policy)
+            cost = 1/np.sum(cost)
+            
             # Push the result to the result_queue
             result_queue.put({"alloc": alloc, "cost": cost})
 
 class Allocator:
-    def __init__(self, n_robots, alloc_policy=AllocationPolicy.BRUTE_FORCE, n_processes=4):
+    def __init__(self, n_robots, alloc_policy=AllocationPolicy.BRUTE_FORCE, n_processes=4, move_policy=MoveComputationPolicy.LARGEST_BATTERY):
         self.n_robots = n_robots
         self.allocation_policy = alloc_policy
+        self.move_policy = move_policy
         self.alloc_options = None
                 
         if alloc_policy is AllocationPolicy.BRUTE_FORCE:
-            self.alloc_options = self.custom_powerset()
+            self.alloc_options = self.__custom_powerset()
             
         # shound be computed at every optimization request. Just check if the allocation policy is consistent
         elif alloc_policy is AllocationPolicy.MOVE1:
@@ -99,16 +103,20 @@ class Allocator:
             pass
         elif alloc_policy is AllocationPolicy.MOVE3:
             pass
+        elif alloc_policy is AllocationPolicy.MPC:
+            pass
         else:
             print(f"Allocation policy {alloc_policy} not supported")
             sys.exit(1)
 
-        self.process_pool = ProcessPool(n_processes)
+        if alloc_policy is not AllocationPolicy.MPC:
+            self.process_pool = ProcessPool(n_processes, move_policy)
 
     def terminate(self):
-        self.process_pool.terminate()
+        if self.allocation_policy is not AllocationPolicy.MPC:
+            self.process_pool.terminate()
             
-    def move_n_powerset(self, n, constrained_allocation):
+    def __move_n_powerset(self, n, constrained_allocation):
         res = []
         current = [i for i in range(self.n_robots)]
         
@@ -122,10 +130,10 @@ class Allocator:
         self._rec_move_n_powerset(current, res, 0, n+count, constrained_allocation)
         return res
         
-    def custom_powerset(self):
+    def __custom_powerset(self):
         res = []
         current = [-1] * self.n_robots
-        self._rec_custom_powerser(current, res, 0)
+        self.__rec_custom_powerser(current, res, 0)
         return res
     
     def print_powerset(self):
@@ -141,7 +149,7 @@ class Allocator:
                 if costrained_allocation[i] != -1 and costrained_allocation[i] != current[i]:
                     return False
                 
-            ret = self._validate_count(current, index+1)
+            ret = self.__validate_count(current, index+1)
             if ret is False:
                 return False
             
@@ -163,21 +171,21 @@ class Allocator:
                 self._rec_move_n_powerset(current, result, index + 1, n, costrained_allocation)
             current[index] = index
     
-    def _rec_custom_powerser(self, current, result, index):
+    def __rec_custom_powerser(self, current, result, index):
         if index == self.n_robots:
             result.append(copy.deepcopy(current))
             return
 
         for i in range(self.n_robots):
             current[index] = i
-            if self._is_consistent(current, index + 1):
-                self._rec_custom_powerser(current, result, index + 1)
+            if self.__is_consistent(current, index + 1):
+                self.__rec_custom_powerser(current, result, index + 1)
             current[index] = -1
     
-    def _is_consistent(self, current, index):
-        return True and self._validate_count(current, index) and self.__check_for_loop(current, index)# and self.__check_chain(current, index) # the last check remove some valid solutions
+    def __is_consistent(self, current, index):
+        return True and self.__validate_count(current, index) and self.__check_for_loop(current, index)# and self.__check_chain(current, index) # the last check remove some valid solutions
     
-    def _validate_with_constraints(self, allocation, constrained_allocation, index=None):
+    def __validate_with_constraints(self, allocation, constrained_allocation, index=None):
         if constrained_allocation is None:
             return True
         
@@ -217,7 +225,7 @@ class Allocator:
                     return False
         return True
     
-    def _validate_count(self, current, index):
+    def __validate_count(self, current, index):
         occurrences = [0 for _ in range(self.n_robots)]
         for i in range(index):
             occurrences[current[i]] += 1
@@ -243,24 +251,69 @@ class Allocator:
         
         return True
     
+    def __mpc(self, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
+        # Define the number of robots and tasks
+        num_robots = len(robots)
+        num_tasks = len(robots)
+
+        # State variable: x_ij is 1 if task j is assigned to robot i, else 0
+        x = cp.Variable((num_robots, num_tasks), boolean=True)
+
+        # Objective: Maxize operation time
+        objective = cp.Maximize(cp.sum(Allocator.optimize_operation_time(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, self.move_policy)))
+
+        # Constraints
+        constraints = []
+
+        # 1. Each task must be assigned to exactly one robot
+        for j in range(num_tasks):
+            constraints.append(cp.sum(x[:, j]) == 1)
+
+        # 2. Each robot can have at most two tasks
+        for i in range(num_robots):
+            constraints.append(cp.sum(x[i, :]) <= 2)
+            
+        for i in range(num_robots):
+            constraints.append(cp.sum(x[i, :]) <= 2)
+            constraints.append(x[i, i] >= cp.sum(x[i, :]) - 1)
+        
+
+        prob = cp.Problem(objective, constraints)
+        
+        # Solve the problem
+        prob.solve()
+
+        # Final MPC task allocation and its cost
+        final_allocation = np.round(x.value)
+        
+        res = [i for i in range(len(robots))]
+        for id, r_alloc in enumerate(final_allocation):
+            for id2, val in enumerate(r_alloc):
+                if abs(val) == 1:
+                    res[id2] = id
+        
+        return res
+    
     def find_best_allocation(self, time_instants, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, costrained_allocation=None):
-        best_cost = np.inf
         best_solution = None
+
+        if self.allocation_policy is AllocationPolicy.MPC:
+            return self.__mpc(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
         
         if self.alloc_options is None:
             if self.allocation_policy is AllocationPolicy.MOVE1:
-                self.alloc_options = self.move_n_powerset(1, costrained_allocation)
+                self.alloc_options = self.__move_n_powerset(1, costrained_allocation)
             elif self.allocation_policy is AllocationPolicy.MOVE2:
-                self.alloc_options = self.move_n_powerset(2, costrained_allocation)
+                self.alloc_options = self.__move_n_powerset(2, costrained_allocation)
             elif self.allocation_policy is AllocationPolicy.MOVE3:
-                self.alloc_options = self.move_n_powerset(3, costrained_allocation)
+                self.alloc_options = self.__move_n_powerset(3, costrained_allocation)
         
         # for a in self.alloc_options:
         #     print(a)        
         # sys.exit(1)
         
         for alloc in self.alloc_options:
-            if not self._validate_with_constraints(alloc, costrained_allocation):
+            if not self.__validate_with_constraints(alloc, costrained_allocation):
                 continue
                         
             self.process_pool.submit(copy.deepcopy(robots), charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, alloc, time_instants)               
@@ -294,7 +347,7 @@ class Allocator:
         return np.sum(res)   
 
     @staticmethod
-    def optimize_operation_time(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
+    def optimize_operation_time(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, policy):
         res = []
 
         for _ in range(time_instants):
@@ -310,9 +363,9 @@ class Allocator:
             available_robots_ids, _ = tick({}, robots, operating_threshold, charging_threshold, False)
             
             if move_computation_enabled:
-                move_computation(available_robots_ids, robots, adjacency_matrix)
+                move_computation(available_robots_ids, robots, adjacency_matrix, policy)
         
-        return 1/np.sum(res)
+        return res
     
 
 if __name__ == "__main__":

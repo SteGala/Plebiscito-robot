@@ -1,4 +1,5 @@
 from src.mpc import AllocationPolicy
+from src.utils import MoveComputationPolicy
 from src.simulator import Simulator
 
 # Configurations from Chatgpt
@@ -12,7 +13,7 @@ small_config = {
 }
 
 medium_config = {
-    "n_robots": 8,
+    "n_robots": 15,
     "charge_rate": 65, # 65Wh
     "discharge_rate": 25, # 25Wh 
     #"discharge_rate": 0,
@@ -47,21 +48,17 @@ if __name__ == "__main__":
     
     for i in range(n_run):
         # Run the simulation to get the values for the battery optimmization
-        s = Simulator(i, f"reference", move_computation_enabled=False, config=medium_config, allocation_policy=AllocationPolicy.MOVE1)
+        s = Simulator(i, f"reference", config=medium_config, allocation_policy=AllocationPolicy.MOVE1)
         s.run(duration)
         
-        s = Simulator(i, f"battery", move_computation_enabled=True, config=medium_config, allocation_policy=AllocationPolicy.MOVE1)
+        s = Simulator(i, f"battery-l", config=medium_config, allocation_policy=AllocationPolicy.MOVE1, move_computation_policy=MoveComputationPolicy.LARGEST_BATTERY)
         s.run(duration)
-        
-        # s = Simulator(i, f"delay-1-9", move_computation_enabled=True, config=medium_config, delay_operation_enabled=True)
-        # s.run(duration)
-        
-        # s = Simulator(i, f"reference-opt", move_computation_enabled=False, optimize_computation_frequency=1, optimize_computation_window=1000, config=medium_config, allocation_policy=AllocationPolicy.MOVE1)
-        # s.run(duration)
-        
-        for j in [250, 500, 750, 1000]:
-            s = Simulator(i, f"battery-opt-{str(j)}-m3", move_computation_enabled=False, optimize_computation_frequency=1, optimize_computation_window=j, config=medium_config, allocation_policy=AllocationPolicy.MOVE3, num_processes=22)
-            s.run(duration)
+
+        s = Simulator(i, "mpc", config=medium_config, allocation_policy=AllocationPolicy.MPC, move_computation_policy=MoveComputationPolicy.NONE, optimize_computation_frequency=1, optimize_computation_window=1000)
+        s.run(duration)
+        # for j in [1000]:
+        #     s = Simulator(i, f"battery-opt", move_computation_enabled=True, optimize_computation_frequency=1, optimize_computation_window=j, config=medium_config, allocation_policy=AllocationPolicy.MOVE1, num_processes=22)
+        #     s.run(duration)
         
        
         

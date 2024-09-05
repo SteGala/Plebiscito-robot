@@ -3,7 +3,7 @@ from src.robot import Robot
 from src.mpc import Allocator, AllocationPolicy
 import random
 import pandas as pd
-from src.utils import compute_adjacency_matrix, move_computation, tick
+from src.utils import compute_adjacency_matrix, move_computation, tick, MoveComputationPolicy
 import os
 from tqdm import tqdm
 import sys
@@ -11,7 +11,7 @@ import sys
 import matplotlib.pyplot as plt
 
 class Simulator:
-    def __init__(self, run_number, sim_name, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_enabled=True, config=None, delay_operation_enabled=False, optimize_computation_frequency=None, optimize_computation_window=50, allocation_policy=AllocationPolicy.BRUTE_FORCE, num_processes=1) -> None:
+    def __init__(self, run_number, sim_name, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_policy=MoveComputationPolicy.NONE, config=None, delay_operation_enabled=False, optimize_computation_frequency=None, optimize_computation_window=50, allocation_policy=AllocationPolicy.BRUTE_FORCE, num_processes=1) -> None:
         if config is None:
             print("ERROR: No configuration provided.")
             sys.exit(1)
@@ -19,7 +19,7 @@ class Simulator:
         self.charging_threshold = charging_threshold
         self.operating_threshold = operating_threshold
         self.robots = []
-        self.move_computation_enabled = move_computation_enabled
+        self.move_computation_policy = move_computation_policy
         self.sim_name = "res/" + sim_name
         self.delay_operation_enabled = delay_operation_enabled
         self.optimize_computation_frequency = optimize_computation_frequency
@@ -27,7 +27,7 @@ class Simulator:
 
         self.allocator = None
         if optimize_computation_frequency is not None:
-            self.allocator = Allocator(config["n_robots"], allocation_policy, num_processes)
+            self.allocator = Allocator(config["n_robots"], allocation_policy, num_processes, move_computation_policy)
         
         self.initialize_stats()
         
@@ -113,8 +113,8 @@ class Simulator:
                     robots[id].operate()
                                 
         # Use available robots to host tasks
-        if self.move_computation_enabled:
-            move_computation(available_robots_ids, robots, self.adjacency_matrix)
+        if self.move_computation_policy is not MoveComputationPolicy.NONE:
+            move_computation(available_robots_ids, robots, self.adjacency_matrix, self.move_computation_policy)
             
         if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0:
             self.optimize_computation(ep)
@@ -132,7 +132,7 @@ class Simulator:
             
         window = min(self.optimize_computation_window, self.epochs - ep)
         
-        offloading_decision_brute = self.allocator.find_best_allocation(window, copy.deepcopy(self.robots), self.charging_threshold, self.operating_threshold, self.move_computation_enabled, self.adjacency_matrix, constrained_allocation)
+        offloading_decision_brute = self.allocator.find_best_allocation(window, copy.deepcopy(self.robots), self.charging_threshold, self.operating_threshold, self.move_computation_policy, self.adjacency_matrix, constrained_allocation)
         
         for r in self.robots:
             r.unhost()
@@ -189,8 +189,8 @@ class Simulator:
                         rob[j].operate()
                         
                 available_robot_ids, _ = tick({}, rob, self.operating_threshold, self.charging_threshold, False)
-                if self.move_computation_enabled:
-                    move_computation(available_robot_ids, rob, self.adjacency_matrix)
+                if self.move_computation_policy is not MoveComputationPolicy.NONE:
+                    move_computation(available_robot_ids, rob, self.adjacency_matrix, self.move_computation_policy)
                 
                 charging = 0
                 operating = 0
