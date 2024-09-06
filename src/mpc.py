@@ -260,7 +260,7 @@ class Allocator:
         x = cp.Variable((num_robots, num_tasks), boolean=True)
 
         # Objective: Maxize operation time
-        objective = cp.Maximize(cp.sum(Allocator.optimize_operation_time(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, self.move_policy)))
+        objective = cp.Maximize(cp.sum(Allocator.optimize_operation_time_mpc_wrapper(x, copy.deepcopy(robots), charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, self.move_policy)))
 
         # Constraints
         constraints = []
@@ -366,6 +366,25 @@ class Allocator:
                 move_computation(available_robots_ids, robots, adjacency_matrix, policy)
         
         return res
+    
+    @staticmethod
+    def optimize_operation_time_mpc_wrapper(x, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, policy):
+        for r in robots:
+            r.unhost()
+            r.unoffload()
+            
+        res = [i for i in range(len(robots))]
+        for id, r_alloc in enumerate(x.value):
+            for id2, val in enumerate(r_alloc):
+                if val == 1:
+                    res[id2] = id
+                    
+        for i, id in enumerate(res):     
+            if robots[id] != robots[i]:
+                robots[i].offload(robots[id])
+                robots[id].host(robots[i].get_self_task())
+        
+        return Allocator.optimize_operation_time(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, policy)
     
 
 if __name__ == "__main__":
