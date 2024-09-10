@@ -54,7 +54,7 @@ if __name__ == "__main__":
         s = Simulator(i, f"battery-l", config=medium_config, allocation_policy=AllocationPolicy.MOVE1, move_computation_policy=MoveComputationPolicy.LARGEST_BATTERY)
         s.run(duration)
 
-        s = Simulator(i, "mpc", config=medium_config, allocation_policy=AllocationPolicy.MPC, move_computation_policy=MoveComputationPolicy.NONE, optimize_computation_frequency=1, optimize_computation_window=1000)
+        s = Simulator(i, "mpc", config=medium_config, allocation_policy=AllocationPolicy.MPC, move_computation_policy=MoveComputationPolicy.LARGEST_BATTERY, optimize_computation_frequency=1, optimize_computation_window=1000)
         s.run(duration)
         # for j in [1000]:
         #     s = Simulator(i, f"battery-opt", move_computation_enabled=True, optimize_computation_frequency=1, optimize_computation_window=j, config=medium_config, allocation_policy=AllocationPolicy.MOVE1, num_processes=22)

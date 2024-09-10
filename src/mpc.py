@@ -181,7 +181,7 @@ class Allocator:
             if self.__is_consistent(current, index + 1):
                 self.__rec_custom_powerser(current, result, index + 1)
             current[index] = -1
-    
+
     def __is_consistent(self, current, index):
         return True and self.__validate_count(current, index) and self.__check_for_loop(current, index)# and self.__check_chain(current, index) # the last check remove some valid solutions
     
@@ -259,8 +259,22 @@ class Allocator:
         # State variable: x_ij is 1 if task j is assigned to robot i, else 0
         x = cp.Variable((num_robots, num_tasks), boolean=True)
 
+        r_c = []
+        r_d = []
+        c = []
+        b = []
+        for r in robots:
+            r_c.append(r.get_charge_rate_percentage())
+            r_d.append(r.get_discharge_rate_percentage())
+            c.append(r.get_self_task().get_consumption())
+            b.append(r.get_total_battery())
+
+        F_0 = 0
+        for i in range(num_robots):
+            F_0 += cp.log(r_c[i]*b[i]) - cp.log(r_c[i]*b[i] + r_d[i]*b[i] + cp.sum(cp.multiply(x[i, :], c)))
+
         # Objective: Maxize operation time
-        objective = cp.Maximize(cp.sum(Allocator.optimize_operation_time_mpc_wrapper(x, copy.deepcopy(robots), charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, self.move_policy)))
+        objective = cp.Maximize(F_0)
 
         # Constraints
         constraints = []
@@ -270,12 +284,17 @@ class Allocator:
             constraints.append(cp.sum(x[:, j]) == 1)
 
         # 2. Each robot can have at most two tasks
-        for i in range(num_robots):
-            constraints.append(cp.sum(x[i, :]) <= 2)
+        # for i in range(num_robots):
+        #     constraints.append(cp.sum(x[i, :]) <= 2)
             
         for i in range(num_robots):
-            constraints.append(cp.sum(x[i, :]) <= 2)
+            #constraints.append(cp.sum(x[i, :]) <= 2)
             constraints.append(x[i, i] >= cp.sum(x[i, :]) - 1)
+
+        for id, r in enumerate(robots):
+            if r.get_status() == "charging":
+                constraints.append(x[id, id] == 1)
+            
         
 
         prob = cp.Problem(objective, constraints)
