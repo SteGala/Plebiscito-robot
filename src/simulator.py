@@ -6,39 +6,49 @@ import pandas as pd
 from src.utils import compute_adjacency_matrix, move_computation, tick, MoveComputationPolicy
 import os
 from tqdm import tqdm
-import sys
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 
 class Simulator:
-    def __init__(self, run_number, sim_name, charging_threshold=0.05, operating_threshold=0.95, probability=1, move_computation_policy=MoveComputationPolicy.NONE, config=None, delay_operation_enabled=False, optimize_computation_frequency=None, optimize_computation_window=50, allocation_policy=AllocationPolicy.BRUTE_FORCE, num_processes=1) -> None:
-        if config is None:
-            print("ERROR: No configuration provided.")
-            sys.exit(1)
-        
-        self.charging_threshold = charging_threshold
-        self.operating_threshold = operating_threshold
-        self.robots = []
-        self.move_computation_policy = move_computation_policy
-        self.sim_name = "res/" + sim_name
-        self.delay_operation_enabled = delay_operation_enabled
-        self.optimize_computation_frequency = optimize_computation_frequency
-        self.optimize_computation_window = optimize_computation_window
+    def __init__(self, run_number, config, move_computation_policies=[MoveComputationPolicy.NONE], allocation_strategies=[], report_dir=None) -> None: 
+        """
+        Initialize the simulator with the given parameters.
 
-        self.allocator = None
-        if optimize_computation_frequency is not None:
-            self.allocator = Allocator(config["n_robots"], allocation_policy, num_processes, move_computation_policy)
+        Args:
+            run_number (int): The number of runs for the simulation.
+            config (dict): Configuration dictionary containing simulation parameters.
+            move_computation_policies (list, optional): List of move computation policies. Defaults to [MoveComputationPolicy.NONE].
+            allocation_strategies (list, optional): List of allocation strategies. Defaults to an empty list.
+            report_dir (str, optional): Directory to save the simulation reports. Defaults to None.
+        """
+        self.charging_threshold = config["charging_threshold"]
+        self.operating_threshold = config["operating_threshold"]
+        self.__robots_backup = []
+        self.move_computation_policies = move_computation_policies
+        if report_dir is None:
+            self.sim_name = "results-" + datetime.today().strftime('%Y-%m-%d-%H:%M:%S')
+        else:
+            self.sim_name = report_dir
+        self.allocation_strategies = allocation_strategies
+        self.config = config
+        self.n_runs = run_number
+
+        if not os.path.exists(self.sim_name):
+            os.makedirs(self.sim_name)
         
-        self.initialize_stats()
         
+    def initialize_robots(self, run_number):
         random.seed(run_number)
+
+        self.robots = []
         
         # Create n_robots instances of the Robot class with random battery levels, charge rates, and discharge rates
-        for i in range(config["n_robots"]):
-            dr = config["discharge_rate"]
-            tb = config["total_battery"]
-            cr = config["charge_rate"]
-            td = config["AI_computation"]
+        for i in range(self.config["n_robots"]):
+            dr = self.config["discharge_rate"]
+            tb = self.config["total_battery"]
+            cr = self.config["charge_rate"]
+            td = self.config["AI_computation"]
             bl = random.randint(int(tb*0.15), int(tb*0.85))
             # bl = tb
             
@@ -47,15 +57,12 @@ class Simulator:
             else:
                 self.robots.append(Robot(i, battery_level=bl, total_battery=tb, charge_rate=cr, disharge_rate=dr, task_demand=td, status=random.choice(["charging", "operating"])))
                 # self.robots.append(Robot(i, battery_level=bl, total_battery=tb, charge_rate=cr, disharge_rate=dr, task_demand=td, status="operating"))
+      
+        self.__robots_backup = copy.deepcopy(self.robots)
 
-            
-        if probability != 1:
-            print("WARNING: The code has not being tested with probability != 1. Unexpected results may arise.")
+        print(f"Initialized simulation with {tb} total battery, {self.config['n_robots']} robots, charge rate {cr}, discharge rate {dr}.")
         
-        # Compute probability-defined adjacency matrix 
-        self.adjacency_matrix = compute_adjacency_matrix(config["n_robots"], probability)   
-        
-        print(f"Initialized simulation with {tb} total battery, {config['n_robots']} robots, charge rate {cr}, discharge rate {dr}.")
+        return
         
     def initialize_stats(self):
         """
@@ -77,6 +84,46 @@ class Simulator:
         Args:
             epochs (int): Number of epochs to run the simulation.
         """
+        offset = 0
+        for dir in os.listdir(self.sim_name):
+            if int(dir) > offset:
+                offset = int(dir)
+
+        if offset != 0:
+            offset += 1
+
+        for it in range(self.n_runs):
+            self.initialize_stats()   
+            self.initialize_robots(it)
+            # Compute probability-defined adjacency matrix 
+            self.adjacency_matrix = compute_adjacency_matrix(self.config["n_robots"], 1)   
+
+            # Run the referebce simulation
+            self.allocator = None
+            self.robots = copy.deepcopy(self.__robots_backup)
+            self.move_computation_policy = MoveComputationPolicy.NONE
+            self.optimize_computation_frequency = None
+            self.optimize_computation_window = None
+            self.__run(epochs, it+offset)
+
+            for move_computation_policy in self.move_computation_policies:
+                self.allocator = None
+                if len(self.allocation_strategies) == 0:
+                    self.robots = copy.deepcopy(self.__robots_backup)
+                    self.move_computation_policy = move_computation_policy
+                    self.optimize_computation_frequency = None
+                    self.optimize_computation_window = None
+                    self.__run(epochs, it+offset)
+                else:
+                    for allocation_strategy in self.allocation_strategies:
+                        self.robots = copy.deepcopy(self.__robots_backup)
+                        self.allocator = Allocator(len(self.robots), allocation_strategy.alloc, allocation_strategy.num_processes, move_computation_policy)
+                        self.move_computation_policy = move_computation_policy
+                        self.optimize_computation_frequency = allocation_strategy.optimize_computation_frequency
+                        self.optimize_computation_window = allocation_strategy.optimize_computation_window
+                        self.__run(epochs, it)
+
+    def __run(self, epochs, iter):
         res = {}
         self.epochs = epochs
         
@@ -99,18 +146,15 @@ class Simulator:
         if self.allocator is not None:
             self.allocator.terminate()
             
-        self.dump_report() 
-        self.plot_results(res)
+        self.dump_report(iter) 
+        # self.plot_results(res)
         
     def progress_simulation(self, res, robots, ep):
-        available_robots_ids, target_for_operating = tick(res, robots, self.operating_threshold, self.charging_threshold, self.delay_operation_enabled)
+        available_robots_ids, target_for_operating = tick(res, robots, self.operating_threshold, self.charging_threshold)
                     
         if len(target_for_operating) > 0:
-            if self.delay_operation_enabled:
-                self.delay_operation(target_for_operating, robots)
-            else:
-                for id in target_for_operating:
-                    robots[id].operate()
+            for id in target_for_operating:
+                robots[id].operate()
                                 
         # Use available robots to host tasks
         if self.move_computation_policy is not MoveComputationPolicy.NONE:
@@ -119,20 +163,10 @@ class Simulator:
         if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0:
             self.optimize_computation(ep)
             
-    def optimize_computation(self, ep=0):
-        constrained_allocation = [-1 for _ in range(len(self.robots))]
-                
-        for id, r in enumerate(self.robots):
-            if r.get_status() == "charging":
-                if r.get_hosted_task() is not None:
-                    constrained_allocation[r.get_hosted_task().get_from().get_name()] = id
-                constrained_allocation[id] = id
-            # if r.get_status() == "operating" and r.get_battery_percentage() < 0.5:
-            #     constrained_allocation[id] = id
-            
+    def optimize_computation(self, ep=0):            
         window = min(self.optimize_computation_window, self.epochs - ep)
         
-        offloading_decision_brute = self.allocator.find_best_allocation(window, copy.deepcopy(self.robots), self.charging_threshold, self.operating_threshold, self.move_computation_policy, self.adjacency_matrix, constrained_allocation)
+        offloading_decision_brute = self.allocator.find_best_allocation(window, copy.deepcopy(self.robots), self.charging_threshold, self.operating_threshold, self.move_computation_policy, self.adjacency_matrix)
         
         for r in self.robots:
             r.unhost()
@@ -244,7 +278,7 @@ class Simulator:
         self.stats_status_robot["charging"].append(charging)
         self.stats_status_robot["operating"].append(operating)
 
-    def dump_report(self):
+    def dump_report(self, iter):
         """
         Dump the simulation report to CSV files.
         """        
@@ -265,14 +299,18 @@ class Simulator:
             d["robot_" + str(robot.name) + "_self_computing"] = stat["self_computing"]
             d["robot_" + str(robot.name) + "_offload_computing"] = stat["offload_computing"]
             
+        conf = str(self.move_computation_policy)
+        if self.allocator is not None:
+            conf += "-" + self.allocator.allocation_strategy.name
+
         # Create the directory if it doesn't exist
-        if not os.path.exists(self.sim_name):
-            os.makedirs(self.sim_name)
+        if not os.path.exists(f"{self.sim_name}/{iter}/{conf}"):
+            os.makedirs(f"{self.sim_name}/{iter}/{conf}")
 
         # Save the dataframes as CSV files in the directory
-        pd.DataFrame([d]).to_csv(f"{self.sim_name}/simulation_stats.csv", index=False)
-        pd.DataFrame([self.stats]).to_csv(f"{self.sim_name}/missed_chances.csv", index=False)
-        pd.DataFrame(self.stats_status_robot).to_csv(f"{self.sim_name}/robot_status.csv", index=False)
+        pd.DataFrame([d]).to_csv(f"{self.sim_name}/{iter}/{conf}/simulation_stats.csv", index=False)
+        pd.DataFrame([self.stats]).to_csv(f"{self.sim_name}/{iter}/{conf}/missed_chances.csv", index=False)
+        pd.DataFrame(self.stats_status_robot).to_csv(f"{self.sim_name}/{iter}/{conf}/robot_status.csv", index=False)
              
     def plot_results(self, data):
         """

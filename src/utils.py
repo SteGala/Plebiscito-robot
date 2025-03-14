@@ -9,6 +9,11 @@ class MoveComputationPolicy(Enum):
     SMALLEST_BATTERY = 2
     RANDOM = 3
 
+    def __str__(self):
+        if self.value == MoveComputationPolicy.NONE.value:
+            return "Reference"
+        return self.name.title()
+
 def compute_adjacency_matrix(n_robots, probability):
     adjacency_matrix = np.zeros((n_robots, n_robots))
     for i in range(n_robots):
@@ -59,7 +64,7 @@ def count_missed_offload(allocation, battery_level, status):
             missed_offload += 1
     return missed_offload
 
-def tick(res, robots, operating_threshold, charging_threshold, delay_enabled):
+def tick(res, robots, operating_threshold, charging_threshold):
     available_robots_ids = []
     target_for_operating = []
         
@@ -78,11 +83,7 @@ def tick(res, robots, operating_threshold, charging_threshold, delay_enabled):
         # If battery level is above operating threshold and the robot is not already operating, set it to operate
         elif battery >= operating_threshold and r_status != "operating":
             # Set the robot to operate
-            #robot.operate()
-            if len(target_for_operating) < 1 and delay_enabled:
-                target_for_operating.append(id)
-            else:
-                robot.operate()
+            robot.operate()
         else:
             # If the robot is not hosting a task and it is currently charging, add it to the available robots list
             if not robot.is_hosting() and r_status == "charging":
@@ -99,6 +100,9 @@ def move_computation(available_robots_ids, robots, adjacency_matrix, policy):
     """
     for i in available_robots_ids:
         robot = robots[i]
+
+        if i == 15:
+            pass
         
         # Skip if the robot is charging or already hosting a task
         if robot.is_hosting():

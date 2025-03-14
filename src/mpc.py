@@ -13,6 +13,13 @@ class AllocationPolicy(Enum):
     MOVE3 = 4
     MPC = 5
 
+class AllocationStrategy:
+    def __init__(self, alloc, optimize_computation_frequency, optimize_computation_window, num_processes) -> None:
+        self.alloc = alloc
+        self.optimize_computation_frequency = optimize_computation_frequency
+        self.optimize_computation_window = optimize_computation_window
+        self.num_processes = num_processes
+
 class ProcessPool:
     def __init__(self, n_processes, policy) -> None:
         self.n_processes = n_processes
@@ -79,7 +86,8 @@ class ProcessPool:
                 rob[i].offload(rob[id])
                 rob[id].host(rob[i].get_self_task()) 
 
-            # cost = Allocator.optimize_missed_chanches(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
+            # cost = Allocator.optimize_missed_chanches(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, policy)
+            # cost = np.sum(cost)
             cost = Allocator.optimize_operation_time(rob, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, policy)
             cost = 1/np.sum(cost)
             
@@ -116,18 +124,12 @@ class Allocator:
         if self.allocation_policy is not AllocationPolicy.MPC:
             self.process_pool.terminate()
             
-    def __move_n_powerset(self, n, constrained_allocation):
+    def __move_n_powerset(self, n, constrained_allocation, current_allocation):
         res = []
-        current = [i for i in range(self.n_robots)]
-        
-        count = 0
-        for id, i in enumerate(constrained_allocation):
-            if i != -1:
-                current[id] = i
-            if i != -1 and i != id:
-                count += 1
+        alloc = [i for i in range(len(constrained_allocation))]
+        res.append(copy.deepcopy(current_allocation))
                  
-        self._rec_move_n_powerset(current, res, 0, n+count, constrained_allocation)
+        self._rec_move_n_powerset(alloc, res, 0, n, constrained_allocation, current_allocation)
         return res
         
     def __custom_powerset(self):
@@ -143,33 +145,35 @@ class Allocator:
     def print_powerset_count(self):
         print(len(self.alloc_options))
         
-    def _rec_move_n_powerset(self, current, result, index, n, costrained_allocation):
+    def _rec_move_n_powerset(self, alloc, result, index, n, costrained_allocation, current_allocation):
         def is_allowed():
-            for i in range(index):
-                if costrained_allocation[i] != -1 and costrained_allocation[i] != current[i]:
-                    return False
-                
-            ret = self.__validate_count(current, index+1)
+            ret = self.__validate_count(alloc, index+1)
             if ret is False:
                 return False
             
             count = 0
-            for i in range(self.n_robots):
-                if current[i] != i:
+            for i in range(index+1):
+                if alloc[i] != current_allocation[i]:
                     count += 1
             if count > n:
                 return False
             return True
-        
+
         if index == self.n_robots:
-            result.append(copy.deepcopy(current))
+            result.append(copy.deepcopy(alloc))
             return
         
-        for i in range(self.n_robots):
-            current[index] = i
+        val = current_allocation[index]
+        if costrained_allocation[index] != -1:
+            alloc[index] = costrained_allocation[index]
             if is_allowed():   
-                self._rec_move_n_powerset(current, result, index + 1, n, costrained_allocation)
-            current[index] = index
+                self._rec_move_n_powerset(alloc, result, index + 1, n, costrained_allocation, current_allocation)
+        else:
+            for i in range(self.n_robots):
+                alloc[index] = i
+                if is_allowed():   
+                    self._rec_move_n_powerset(alloc, result, index + 1, n, costrained_allocation, current_allocation)
+                alloc[index] = val
     
     def __rec_custom_powerser(self, current, result, index):
         if index == self.n_robots:
@@ -313,27 +317,49 @@ class Allocator:
         
         return res
     
-    def find_best_allocation(self, time_instants, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, costrained_allocation=None):
+    def wrap(self, constrained_allocation, current_allocation):
+        if self.allocation_policy is AllocationPolicy.MOVE1:
+            return self.__move_n_powerset(1, constrained_allocation, current_allocation)
+        elif self.allocation_policy is AllocationPolicy.MOVE2:
+            return self.__move_n_powerset(2, constrained_allocation, current_allocation)
+        elif self.allocation_policy is AllocationPolicy.MOVE3:
+            return self.__move_n_powerset(3, constrained_allocation, current_allocation)
+    
+    def find_best_allocation(self, time_instants, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix):
         best_solution = None
+        
+        constrained_allocation = [-1 for _ in range(len(robots))]
+        current_allocation = [-1 for _ in range(len(robots))]
+                
+        for id, r in enumerate(robots):
+            if r.get_status() == "charging":
+                # if r.get_hosted_task() is not None:
+                #     constrained_allocation[r.get_hosted_task().get_from().get_name()] = id
+                constrained_allocation[id] = id
+                current_allocation[id] = id
+            else:
+                current_allocation[id] = r.get_self_task().get_to().get_name()
+            # if r.get_status() == "operating" and r.get_battery_percentage() < 0.5:
+            #     constrained_allocation[id] = id
 
         if self.allocation_policy is AllocationPolicy.MPC:
             return self.__mpc(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
         
         if self.alloc_options is None:
             if self.allocation_policy is AllocationPolicy.MOVE1:
-                self.alloc_options = self.__move_n_powerset(1, costrained_allocation)
+                self.alloc_options = self.__move_n_powerset(1, constrained_allocation, current_allocation)
             elif self.allocation_policy is AllocationPolicy.MOVE2:
-                self.alloc_options = self.__move_n_powerset(2, costrained_allocation)
+                self.alloc_options = self.__move_n_powerset(2, constrained_allocation, current_allocation)
             elif self.allocation_policy is AllocationPolicy.MOVE3:
-                self.alloc_options = self.__move_n_powerset(3, costrained_allocation)
+                self.alloc_options = self.__move_n_powerset(3, constrained_allocation, current_allocation)
         
         # for a in self.alloc_options:
         #     print(a)        
         # sys.exit(1)
         
         for alloc in self.alloc_options:
-            if not self.__validate_with_constraints(alloc, costrained_allocation):
-                continue
+            # if not self.__validate_with_constraints(alloc, costrained_allocation):
+            #     continue
                         
             self.process_pool.submit(copy.deepcopy(robots), charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, alloc, time_instants)               
             
@@ -345,7 +371,7 @@ class Allocator:
         return best_solution
     
     @staticmethod
-    def optimize_missed_chanches(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
+    def optimize_missed_chanches(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, policy):
         res = []
 
         for _ in range(time_instants):
@@ -361,9 +387,9 @@ class Allocator:
             available_robots_ids, _ = tick({}, robots, operating_threshold, charging_threshold, False)
             
             if move_computation_enabled:
-                move_computation(available_robots_ids, robots, adjacency_matrix)
+                move_computation(available_robots_ids, robots, adjacency_matrix, policy)
         
-        return np.sum(res)   
+        return res      
 
     @staticmethod
     def optimize_operation_time(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants, policy):
@@ -413,15 +439,54 @@ if __name__ == "__main__":
     battery_status = ['operating', 'operating']
     discharge_rate = [5, 5]
     charge_rate = [5, 5]
-    costrained_allocation = [-1, -1, 0, -1, -1, -1]
+    costrained_allocation = [-1, -1, 0, -1]
+    current_allocation = [0, 1, 0, 3]
     time_instants = 5
-
-    # bf = Allocator(8, AllocationPolicy.BRUTE_FORCE)
-    # bf.print_powerset_count()
     
-    bf = Allocator(6, AllocationPolicy.MOVE1)
-    bf.find_best_allocation(10, {}, 0.15, 0.85, True, [], costrained_allocation)
+    bf = Allocator(4, AllocationPolicy.MOVE1)
+    a1 = bf.wrap(costrained_allocation, current_allocation)
+    print(a1)
+    bf.terminate()
     
+    bf = Allocator(4, AllocationPolicy.MOVE2)
+    a2 = bf.wrap(costrained_allocation, current_allocation)
+    print(a2)
+    bf.terminate()
+    
+    bf = Allocator(4, AllocationPolicy.MOVE3)
+    a3 = bf.wrap(costrained_allocation, current_allocation)
+    print(a3)
+    bf.terminate()
+    
+    for a in a1:
+        found = False
+        for aa in a2:
+            if a == aa:
+                found = True
+                break
+        if not found:
+            print("Error1")
+            
+    for a in a1:
+        found = False
+        for aa in a3:
+            if a == aa:
+                found = True
+                break
+        if not found:
+            print("Error2")
+            
+    for a in a2:
+        found = False
+        for aa in a3:
+            if a == aa:
+                found = True
+                break
+        if not found:
+            print("Error3")
+            
+    print("All good")
+        
     # bf = Allocator(8, AllocationPolicy.MOVE2)
     # bf.print_powerset_count()
     
