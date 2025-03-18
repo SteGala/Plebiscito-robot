@@ -12,9 +12,24 @@ class AllocationPolicy(Enum):
     MOVE2 = 3
     MOVE3 = 4
     MPC = 5
+    NONE = 6
+
+    def __str__(self):
+        if self is AllocationPolicy.BRUTE_FORCE:
+            return "Brute_force"
+        elif self is AllocationPolicy.MOVE1:
+            return "Move1"
+        elif self is AllocationPolicy.MOVE2:
+            return "Move2"
+        elif self is AllocationPolicy.MOVE3:
+            return "Move3"
+        elif self is AllocationPolicy.MPC:
+            return "MPC"
+        elif self is AllocationPolicy.NONE:
+            return ""
 
 class AllocationStrategy:
-    def __init__(self, alloc, optimize_computation_frequency, optimize_computation_window, num_processes) -> None:
+    def __init__(self, alloc, optimize_computation_frequency=50, optimize_computation_window=50, num_processes=1) -> None:
         self.alloc = alloc
         self.optimize_computation_frequency = optimize_computation_frequency
         self.optimize_computation_window = optimize_computation_window
@@ -384,7 +399,7 @@ class Allocator:
                     operating += 1 
 
             res.append((charging - operating) ** 2)
-            available_robots_ids, _ = tick({}, robots, operating_threshold, charging_threshold, False)
+            available_robots_ids, _ = tick({}, robots, operating_threshold, charging_threshold)
             
             if move_computation_enabled:
                 move_computation(available_robots_ids, robots, adjacency_matrix, policy)
@@ -405,7 +420,7 @@ class Allocator:
                     operating += 1 
 
             res.append(operating)
-            available_robots_ids, _ = tick({}, robots, operating_threshold, charging_threshold, False)
+            available_robots_ids, _ = tick({}, robots, operating_threshold, charging_threshold)
             
             if move_computation_enabled:
                 move_computation(available_robots_ids, robots, adjacency_matrix, policy)

@@ -117,10 +117,11 @@ class Simulator:
                 else:
                     for allocation_strategy in self.allocation_strategies:
                         self.robots = copy.deepcopy(self.__robots_backup)
-                        self.allocator = Allocator(len(self.robots), allocation_strategy.alloc, allocation_strategy.num_processes, move_computation_policy)
                         self.move_computation_policy = move_computation_policy
-                        self.optimize_computation_frequency = allocation_strategy.optimize_computation_frequency
-                        self.optimize_computation_window = allocation_strategy.optimize_computation_window
+                        if allocation_strategy.alloc != AllocationPolicy.NONE:
+                            self.allocator = Allocator(len(self.robots), allocation_strategy.alloc, allocation_strategy.num_processes, move_computation_policy)
+                            self.optimize_computation_frequency = allocation_strategy.optimize_computation_frequency
+                            self.optimize_computation_window = allocation_strategy.optimize_computation_window
                         self.__run(epochs, it)
 
     def __run(self, epochs, iter):
@@ -301,7 +302,7 @@ class Simulator:
             
         conf = str(self.move_computation_policy)
         if self.allocator is not None:
-            conf += "-" + self.allocator.allocation_strategy.name
+            conf += "-" + str(self.allocator.allocation_policy)
 
         # Create the directory if it doesn't exist
         if not os.path.exists(f"{self.sim_name}/{iter}/{conf}"):

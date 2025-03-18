@@ -1,4 +1,4 @@
-from src.mpc import AllocationPolicy
+from src.mpc import AllocationPolicy, AllocationStrategy
 from src.utils import MoveComputationPolicy
 from src.simulator import Simulator
 from datetime import datetime
@@ -17,7 +17,7 @@ small_config = {
 }
 
 medium_config = {
-    "n_robots": 25,
+    "n_robots": 10,
     "charge_rate": 65, # 65Wh
     "discharge_rate": 25, # 25Wh 
     #"discharge_rate": 0,
@@ -51,11 +51,11 @@ config = {
 # Note: every time instant represent one minute of simulation, therefore, the total_battery is multiplied by 60 to get the total battery
 
 if __name__ == "__main__":
-    duration = 1000
-    n_run = 100    
+    duration = 15000
+    n_run = 3
 
     # Run the simulation to get the values for the battery optimmization
-    s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY, MoveComputationPolicy.SMALLEST_BATTERY, MoveComputationPolicy.RANDOM], report_dir="results")
+    s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY], allocation_strategies=[AllocationStrategy(AllocationPolicy.NONE), AllocationStrategy(AllocationPolicy.MOVE1, num_processes=8), AllocationStrategy(AllocationPolicy.MOVE2, num_processes=8)], report_dir="results")
     s.run(duration)
             
         
