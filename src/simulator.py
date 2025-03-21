@@ -165,11 +165,17 @@ class Simulator:
     def optimize_computation(self, ep=0):            
         window = min(self.optimize_computation_window, self.epochs - ep)
         
-        offloading_decision_brute = self.allocator.find_best_allocation(window, copy.deepcopy(self.robots), self.charging_threshold, self.operating_threshold, self.move_computation_policy, self.adjacency_matrix)
+        _, status, offload = self.allocator.find_best_allocation_new(window, copy.deepcopy(self.robots), self.charging_threshold, self.operating_threshold, self.move_computation_policy, self.adjacency_matrix)
         
         for r in self.robots:
             r.unhost()
             r.unoffload()
+
+        for id, s in enumerate(status):
+            if s == 1:
+                self.robots[id].operate()
+            else:
+                self.robots[id].charge()
             
         # if ep == 2200:
         #     print(offloading_decision_brute)

@@ -304,69 +304,11 @@ class Allocator:
         problem = cp.Problem(objective, constraints)
         problem.solve(solver=cp.GUROBI if "GUROBI" in cp.installed_solvers() else cp.ECOS)
         
-        return x.value, u.value, o.value#, w.value
+        return x.value[:, 1], u.value[:, 1], o.value[:, 1]#, w.value
     
-    def __mpc(self, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
-        # Define the number of robots and tasks
-        num_robots = len(robots)
-        num_tasks = len(robots)
-
-        # State variable: x_ij is 1 if task j is assigned to robot i, else 0
-        x = cp.Variable((num_robots, num_tasks), boolean=True)
-
-        r_c = []
-        r_d = []
-        c = []
-        b = []
-        for r in robots:
-            r_c.append(r.get_charge_rate_percentage())
-            r_d.append(r.get_discharge_rate_percentage())
-            c.append(r.get_self_task().get_consumption())
-            b.append(r.get_total_battery())
-
-        F_0 = 0
-        for i in range(num_robots):
-            F_0 += cp.log(r_c[i]*b[i]) - cp.log(r_c[i]*b[i] + r_d[i]*b[i] + cp.sum(cp.multiply(x[i, :], c)))
-
-        # Objective: Maxize operation time
-        objective = cp.Maximize(F_0)
-
-        # Constraints
-        constraints = []
-
-        # 1. Each task must be assigned to exactly one robot
-        for j in range(num_tasks):
-            constraints.append(cp.sum(x[:, j]) == 1)
-
-        # 2. Each robot can have at most two tasks
-        # for i in range(num_robots):
-        #     constraints.append(cp.sum(x[i, :]) <= 2)
-            
-        for i in range(num_robots):
-            #constraints.append(cp.sum(x[i, :]) <= 2)
-            constraints.append(x[i, i] >= cp.sum(x[i, :]) - 1)
-
-        for id, r in enumerate(robots):
-            if r.get_status() == "charging":
-                constraints.append(x[id, id] == 1)
-            
         
-
-        prob = cp.Problem(objective, constraints)
-        
-        # Solve the problem
-        prob.solve()
-
-        # Final MPC task allocation and its cost
-        final_allocation = np.round(x.value)
-        
-        res = [i for i in range(len(robots))]
-        for id, r_alloc in enumerate(final_allocation):
-            for id2, val in enumerate(r_alloc):
-                if abs(val) == 1:
-                    res[id2] = id
-        
-        return res
+    def find_best_allocation_new(self, robots): 
+        return self.__mpc_new(robots)
     
     def wrap(self, constrained_allocation, current_allocation):
         if self.allocation_policy is AllocationPolicy.MOVE1:
@@ -375,24 +317,6 @@ class Allocator:
             return self.__move_n_powerset(2, constrained_allocation, current_allocation)
         elif self.allocation_policy is AllocationPolicy.MOVE3:
             return self.__move_n_powerset(3, constrained_allocation, current_allocation)
-        
-    def find_best_allocation_new(self, time_instants, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix): 
-        constrained_allocation = [-1 for _ in range(len(robots))]
-        current_allocation = [-1 for _ in range(len(robots))]
-                
-        for id, r in enumerate(robots):
-            if r.get_status() == "charging":
-                # if r.get_hosted_task() is not None:
-                #     constrained_allocation[r.get_hosted_task().get_from().get_name()] = id
-                constrained_allocation[id] = id
-                current_allocation[id] = id
-            else:
-                current_allocation[id] = r.get_self_task().get_to().get_name()
-            # if r.get_status() == "operating" and r.get_battery_percentage() < 0.5:
-            #     constrained_allocation[id] = id
-            
-        if self.allocation_policy is AllocationPolicy.MPC:
-            return self.__mpc_new(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
     
     def find_best_allocation(self, time_instants, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix):
         best_solution = None
