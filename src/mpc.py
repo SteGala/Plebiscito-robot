@@ -110,7 +110,7 @@ class ProcessPool:
             result_queue.put({"alloc": alloc, "cost": cost})
 
 class Allocator:
-    def __init__(self, n_robots, alloc_strategy=AllocationStrategy()):#, n_processes=4, move_policy=MoveComputationPolicy.LARGEST_BATTERY):
+    def __init__(self, n_robots, alloc_strategy=AllocationStrategy(alloc=AllocationPolicy.MPC)):#, n_processes=4, move_policy=MoveComputationPolicy.LARGEST_BATTERY):
         self.n_robots = n_robots
         self.alloc_strategy = alloc_strategy
         self.allocation_policy = alloc_strategy.alloc
@@ -268,9 +268,10 @@ class Allocator:
     def __mpc_new(self, robots):
         N = len(robots)
         T = self.alloc_strategy.optimize_computation_window
-        consume_rate = robots[0].get_self_task().get_consumption()
-        charge_rate = robots[0].get_charge_rate_percentage()
+        consume_rate = robots[0].get_discharge_rate()
+        charge_rate = robots[0].get_charge_rate()
         computation_cost = robots[0].get_self_task().get_consumption()
+        max_battery = robots[0].get_total_battery()
         
         # Variabili decisionali
         x = cp.Variable((N, T))  # Livello di batteria per ogni robot nel tempo
@@ -292,11 +293,11 @@ class Allocator:
             for i in range(N):
                 constraints.append(x[i, t+1] == x[i, t] + charge_rate * (1 - u[i, t]) - consume_rate * u[i, t] - computation_cost * (u[i, t] - o[i, t]))
                 constraints.append(x[i, t+1] >= 0)
-                constraints.append(x[i, t+1] <= 100)
+                constraints.append(x[i, t+1] <= max_battery)
                 
                 constraints.append(o[i, t] <= u[i, t])
             
-            constraints.append(cp.sum(o[:, t]) == N - cp.sum(u[:, t]))
+            constraints.append(cp.sum(o[:, t]) <= N - cp.sum(u[:, t]))
             
         objective = cp.Maximize(cp.sum(u))
         

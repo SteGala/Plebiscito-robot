@@ -51,11 +51,11 @@ config = {
 # Note: every time instant represent one minute of simulation, therefore, the total_battery is multiplied by 60 to get the total battery
 
 if __name__ == "__main__":
-    duration = 15000
-    n_run = 3
+    duration = 1500
+    n_run = 1
 
     # Run the simulation to get the values for the battery optimmization
-    s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY], allocation_strategies=[AllocationStrategy(AllocationPolicy.NONE), AllocationStrategy(AllocationPolicy.MOVE1, num_processes=8), AllocationStrategy(AllocationPolicy.MOVE2, num_processes=8)], report_dir="results")
+    s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY], allocation_strategies=[AllocationStrategy(AllocationPolicy.MPC, optimize_computation_frequency=1, optimize_computation_window=25)], report_dir="results")
     s.run(duration)
             
         

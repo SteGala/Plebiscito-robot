@@ -165,7 +165,7 @@ class Simulator:
     def optimize_computation(self, ep=0):            
         window = min(self.optimize_computation_window, self.epochs - ep)
         
-        _, status, offload = self.allocator.find_best_allocation_new(window, copy.deepcopy(self.robots), self.charging_threshold, self.operating_threshold, self.move_computation_policy, self.adjacency_matrix)
+        _, status, offload = self.allocator.find_best_allocation_new(copy.deepcopy(self.robots))
         
         for r in self.robots:
             r.unhost()
@@ -181,7 +181,7 @@ class Simulator:
         
         for id, o in enumerate(offload):
             if o == 1:
-                self.robots[id].offload(self.robots[off])    
+                self.robots[id].offload(self.robots[charging_ids.pop(0)])    
                                 
         return
     
