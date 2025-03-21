@@ -110,34 +110,29 @@ class ProcessPool:
             result_queue.put({"alloc": alloc, "cost": cost})
 
 class Allocator:
-    def __init__(self, n_robots, alloc_policy=AllocationPolicy.BRUTE_FORCE, n_processes=4, move_policy=MoveComputationPolicy.LARGEST_BATTERY):
+    def __init__(self, n_robots, alloc_strategy=AllocationStrategy()):#, n_processes=4, move_policy=MoveComputationPolicy.LARGEST_BATTERY):
         self.n_robots = n_robots
-        self.allocation_policy = alloc_policy
-        self.move_policy = move_policy
-        self.alloc_options = None
+        self.alloc_strategy = alloc_strategy
+        self.allocation_policy = alloc_strategy.alloc
+        #self.move_policy = move_policy
+        # self.alloc_options = None
                 
-        if alloc_policy is AllocationPolicy.BRUTE_FORCE:
-            self.alloc_options = self.__custom_powerset()
+        # if alloc_policy is AllocationPolicy.BRUTE_FORCE:
+        #     self.alloc_options = self.__custom_powerset()
             
-        # shound be computed at every optimization request. Just check if the allocation policy is consistent
-        elif alloc_policy is AllocationPolicy.MOVE1:
-            pass
-        elif alloc_policy is AllocationPolicy.MOVE2:
-            pass
-        elif alloc_policy is AllocationPolicy.MOVE3:
-            pass
-        elif alloc_policy is AllocationPolicy.MPC:
+        if self.allocation_policy is AllocationPolicy.MPC:
             pass
         else:
-            print(f"Allocation policy {alloc_policy} not supported")
+            print(f"Allocation policy {self.allocation_policy} not yet supported.")
             sys.exit(1)
 
-        if alloc_policy is not AllocationPolicy.MPC:
-            self.process_pool = ProcessPool(n_processes, move_policy)
+        # if alloc_policy is not AllocationPolicy.MPC:
+        #     self.process_pool = ProcessPool(n_processes, move_policy)
 
     def terminate(self):
-        if self.allocation_policy is not AllocationPolicy.MPC:
-            self.process_pool.terminate()
+        pass
+        # if self.allocation_policy is not AllocationPolicy.MPC:
+        #     self.process_pool.terminate()
             
     def __move_n_powerset(self, n, constrained_allocation, current_allocation):
         res = []
@@ -270,6 +265,47 @@ class Allocator:
         
         return True
     
+    def __mpc_new(self, robots):
+        N = len(robots)
+        T = self.alloc_strategy.optimize_computation_window
+        consume_rate = robots[0].get_self_task().get_consumption()
+        charge_rate = robots[0].get_charge_rate_percentage()
+        computation_cost = robots[0].get_self_task().get_consumption()
+        
+        # Variabili decisionali
+        x = cp.Variable((N, T))  # Livello di batteria per ogni robot nel tempo
+        u = cp.Variable((N, T), boolean=True)  # 1 se il robot è operativo, 0 se è in carica
+        o = cp.Variable((N, T), boolean=True)  # 1 se il robot sta offloadando, 0 altrimenti
+        #w = cp.Variable((N, T))  # Variabile ausiliaria per eliminare il prodotto tra booleani
+        
+        constraints = []
+        
+        # Stato iniziale (vincolo invece di assegnazione diretta)
+        x_init = [r.get_battery_level() for r in robots]
+        constraints.append(x[:, 0] == x_init)  # Vincolo per i livelli iniziali della batteria
+        u_init = [1 if r.get_status() == "operating" else 0 for r in robots]
+        constraints.append(u[:, 0] == u_init)  # Vincolo per lo stato iniziale degli operatori
+        o_init = [1 if r.has_offloaded() else 0 for r in robots]
+        constraints.append(o[:, 0] == o_init)  # Vincolo per lo stato iniziale dell'offloading
+        
+        for t in range(T - 1):
+            for i in range(N):
+                constraints.append(x[i, t+1] == x[i, t] + charge_rate * (1 - u[i, t]) - consume_rate * u[i, t] - computation_cost * (u[i, t] - o[i, t]))
+                constraints.append(x[i, t+1] >= 0)
+                constraints.append(x[i, t+1] <= 100)
+                
+                constraints.append(o[i, t] <= u[i, t])
+            
+            constraints.append(cp.sum(o[:, t]) == N - cp.sum(u[:, t]))
+            
+        objective = cp.Maximize(cp.sum(u))
+        
+        # Risoluzione del problema
+        problem = cp.Problem(objective, constraints)
+        problem.solve(solver=cp.GUROBI if "GUROBI" in cp.installed_solvers() else cp.ECOS)
+        
+        return x.value, u.value, o.value#, w.value
+    
     def __mpc(self, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants):
         # Define the number of robots and tasks
         num_robots = len(robots)
@@ -339,6 +375,24 @@ class Allocator:
             return self.__move_n_powerset(2, constrained_allocation, current_allocation)
         elif self.allocation_policy is AllocationPolicy.MOVE3:
             return self.__move_n_powerset(3, constrained_allocation, current_allocation)
+        
+    def find_best_allocation_new(self, time_instants, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix): 
+        constrained_allocation = [-1 for _ in range(len(robots))]
+        current_allocation = [-1 for _ in range(len(robots))]
+                
+        for id, r in enumerate(robots):
+            if r.get_status() == "charging":
+                # if r.get_hosted_task() is not None:
+                #     constrained_allocation[r.get_hosted_task().get_from().get_name()] = id
+                constrained_allocation[id] = id
+                current_allocation[id] = id
+            else:
+                current_allocation[id] = r.get_self_task().get_to().get_name()
+            # if r.get_status() == "operating" and r.get_battery_percentage() < 0.5:
+            #     constrained_allocation[id] = id
+            
+        if self.allocation_policy is AllocationPolicy.MPC:
+            return self.__mpc_new(robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix, time_instants)
     
     def find_best_allocation(self, time_instants, robots, charging_threshold, operating_threshold, move_computation_enabled, adjacency_matrix):
         best_solution = None

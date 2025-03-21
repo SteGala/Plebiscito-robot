@@ -2,12 +2,13 @@ import cvxpy as cp
 import numpy as np
 
 # Parametri del sistema
-N = 10  # Numero di robot
+N = 20  # Numero di robot
 T = 20  # Orizzonte temporale
 B_max = 100  # Capacità massima della batteria
 B_min = 10   # Soglia minima della batteria
-charge_rate = 5  # Velocità di ricarica
-consume_rate = 4  # Consumo per operazione
+charge_rate = 1  # Velocità di ricarica
+consume_rate = 1  # Consumo per operazione
+computation_cost = 10  # Costo computazionale per il computing
 
 def mpc_optimization():
     # Variabili decisionali
@@ -26,11 +27,15 @@ def mpc_optimization():
     
     for t in range(T - 1):
         for i in range(N):
-            constraints.append(x[i, t+1] == x[i, t] + charge_rate * (1 - u[i, t]) - consume_rate * u[i, t])
-            # constraints.append(x[i, t+1] >= 0)
-            # constraints.append(x[i, t+1] <= 100)
+            constraints.append(x[i, t+1] == x[i, t] + charge_rate * (1 - u[i, t]) - consume_rate * u[i, t] - computation_cost * (u[i, t] - o[i, t]))
+            constraints.append(x[i, t+1] >= 0)
+            constraints.append(x[i, t+1] <= 100)
             
-            constraints.append(u[i, t] <= (1/charge_rate) * (100 - x[i, t]))
+            constraints.append(o[i, t] <= u[i, t])
+        
+        constraints.append(cp.sum(o[:, t]) == N - cp.sum(u[:, t]))
+            
+            # constraints.append(u[i, t] <= (1/charge_rate) * (100 - x[i, t]))
             #if x[i, t+1] <= consume_rate:
             #constraints.append(u[i, t+1] ==  charge_rate * (i - u[i, t]) - consume_rate * u[i, t])
             
@@ -56,13 +61,21 @@ def mpc_optimization():
     problem = cp.Problem(objective, constraints)
     problem.solve(solver=cp.GUROBI if "GUROBI" in cp.installed_solvers() else cp.ECOS)
     
+    if x.value is None:
+        print(x_init)
+        print(u_init)
+    
     return x.value, u.value, o.value#, w.value
 
 # Esegui l'ottimizzazione
 battery_levels, operations, offloading = mpc_optimization()
 
-# Stampa risultati
-print("Battery Levels:\n", battery_levels)
-print("Operations:\n", operations)
-print("Offloading:\n", offloading)
-#print("Auxiliary Variable:\n", aux_var)
+if battery_levels is not None:
+    # Stampa risultati
+    for i in range(N):
+        print("Robot", i)
+        print("Battery Levels:", battery_levels[i])
+        print("Operations:", operations[i])
+        print("Offloading:", offloading[i])
+        print()
+    #print("Auxiliary Variable:\n", aux_var)

@@ -108,21 +108,19 @@ class Simulator:
 
             for move_computation_policy in self.move_computation_policies:
                 self.allocator = None
-                if len(self.allocation_strategies) == 0:
-                    self.robots = copy.deepcopy(self.__robots_backup)
-                    self.move_computation_policy = move_computation_policy
-                    self.optimize_computation_frequency = None
-                    self.optimize_computation_window = None
-                    self.__run(epochs, it+offset)
-                else:
-                    for allocation_strategy in self.allocation_strategies:
-                        self.robots = copy.deepcopy(self.__robots_backup)
-                        self.move_computation_policy = move_computation_policy
-                        if allocation_strategy.alloc != AllocationPolicy.NONE:
-                            self.allocator = Allocator(len(self.robots), allocation_strategy.alloc, allocation_strategy.num_processes, move_computation_policy)
-                            self.optimize_computation_frequency = allocation_strategy.optimize_computation_frequency
-                            self.optimize_computation_window = allocation_strategy.optimize_computation_window
-                        self.__run(epochs, it)
+                self.robots = copy.deepcopy(self.__robots_backup)
+                self.move_computation_policy = move_computation_policy
+                self.optimize_computation_frequency = None
+                self.optimize_computation_window = None
+                self.__run(epochs, it+offset)
+                
+            for allocation_strategy in self.allocation_strategies:
+                self.robots = copy.deepcopy(self.__robots_backup)
+                self.move_computation_policy = None
+                self.allocator = Allocator(len(self.robots), allocation_strategy)
+                self.optimize_computation_frequency = allocation_strategy.optimize_computation_frequency
+                self.optimize_computation_window = allocation_strategy.optimize_computation_window
+                self.__run(epochs, it+offset)
 
     def __run(self, epochs, iter):
         res = {}
@@ -150,15 +148,15 @@ class Simulator:
         self.dump_report(iter) 
         # self.plot_results(res)
         
-    def progress_simulation(self, res, robots, ep):
-        available_robots_ids, target_for_operating = tick(res, robots, self.operating_threshold, self.charging_threshold)
-                    
-        if len(target_for_operating) > 0:
-            for id in target_for_operating:
-                robots[id].operate()
-                                
+    def progress_simulation(self, res, robots, ep):                                
         # Use available robots to host tasks
-        if self.move_computation_policy is not MoveComputationPolicy.NONE:
+        if self.move_computation_policy is not None:
+            available_robots_ids, target_for_operating = tick(res, robots, self.operating_threshold, self.charging_threshold)
+                    
+            if len(target_for_operating) > 0:
+                for id in target_for_operating:
+                    robots[id].operate()
+                    
             move_computation(available_robots_ids, robots, self.adjacency_matrix, self.move_computation_policy)
             
         if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0:
@@ -300,9 +298,10 @@ class Simulator:
             d["robot_" + str(robot.name) + "_self_computing"] = stat["self_computing"]
             d["robot_" + str(robot.name) + "_offload_computing"] = stat["offload_computing"]
             
-        conf = str(self.move_computation_policy)
-        if self.allocator is not None:
-            conf += "-" + str(self.allocator.allocation_policy)
+        if self.move_computation_policy is not None:
+            conf = str(self.move_computation_policy)
+        else:
+            conf = str(self.allocator.allocation_policy)
 
         # Create the directory if it doesn't exist
         if not os.path.exists(f"{self.sim_name}/{iter}/{conf}"):
