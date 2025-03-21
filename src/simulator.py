@@ -171,19 +171,17 @@ class Simulator:
             r.unhost()
             r.unoffload()
 
+        charging_ids = []
         for id, s in enumerate(status):
             if s == 1:
                 self.robots[id].operate()
             else:
                 self.robots[id].charge()
-            
-        # if ep == 2200:
-        #     print(offloading_decision_brute)
-            
-        for i, id in enumerate(offloading_decision_brute):     
-            if self.robots[id] != self.robots[i]:
-                self.robots[i].offload(self.robots[id])
-                self.robots[id].host(self.robots[i].get_self_task())
+                charging_ids.append(id)
+        
+        for id, o in enumerate(offload):
+            if o == 1:
+                self.robots[id].offload(self.robots[off])    
                                 
         return
     
