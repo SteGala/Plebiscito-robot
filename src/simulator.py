@@ -131,7 +131,7 @@ class Simulator:
             res[r.name] = []
             
         for ep in tqdm(range(epochs), desc = 'Simulating epoch: ', smoothing=0):
-            # if ep == 2200:
+            # if ep == 55:
             #     self.print_infrastructure(ep)
                 
             self.progress_simulation(res, self.robots, ep)
@@ -163,7 +163,8 @@ class Simulator:
             self.optimize_computation(ep)
             
     def optimize_computation(self, ep=0):            
-        window = min(self.optimize_computation_window, self.epochs - ep)
+        for r in self.robots:
+            r.tick()
         
         _, status, offload = self.allocator.find_best_allocation_new(copy.deepcopy(self.robots))
         
@@ -181,7 +182,9 @@ class Simulator:
         
         for id, o in enumerate(offload):
             if o == 1:
-                self.robots[id].offload(self.robots[charging_ids.pop(0)])    
+                iid = charging_ids.pop(0)
+                self.robots[id].offload(self.robots[iid])  
+                assert self.robots[iid].host(self.robots[id].get_self_task()) != False  
                                 
         return
     
