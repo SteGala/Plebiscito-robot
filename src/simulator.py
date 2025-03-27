@@ -171,8 +171,8 @@ class Simulator:
         if status is None:
             return
         
-        status = status[:, 1]
-        offload = offload[:, 1]
+        status = status[:, 0]
+        offload = offload[:, 0]
         
         for r in self.robots:
             r.unhost()

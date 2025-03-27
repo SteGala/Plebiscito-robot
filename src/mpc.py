@@ -9,6 +9,7 @@ import cvxpy as cp
 class AllocationPolicy(Enum):
     MPC = 1
     MPC_REDUCE_FLIP_A1 = 2
+    TEST = 3
     NONE = 3
 
     def __str__(self):
@@ -34,8 +35,7 @@ class Allocator:
         self.charging_threshold = charging_threshold
         self.operating_threshold = operating_threshold
             
-        print(cp.installed_solvers())
-        if self.allocation_policy is AllocationPolicy.MPC or self.allocation_policy is AllocationPolicy.MPC_REDUCE_FLIP_A1:
+        if self.allocation_policy is AllocationPolicy.MPC or self.allocation_policy is AllocationPolicy.MPC_REDUCE_FLIP_A1 or self.allocation_policy is AllocationPolicy.TEST:
             pass
         else:
             print(f"Allocation policy {self.allocation_policy} not yet supported.")
@@ -65,16 +65,16 @@ class Allocator:
         # Stato iniziale (vincolo invece di assegnazione diretta)
         x_init = [r.get_battery_level() for r in robots]
         constraints.append(x[:, 0] == x_init)  # Vincolo per i livelli iniziali della batteria
-        u_init = [1 if r.get_status() == "operating" else 0 for r in robots]
-        constraints.append(u[:, 0] == u_init)  # Vincolo per lo stato iniziale degli operatori
-        o_init = [1 if r.has_offloaded() else 0 for r in robots]
-        constraints.append(o[:, 0] == o_init)  # Vincolo per lo stato iniziale dell'offloading
+        # u_init = [1 if r.get_status() == "operating" else 0 for r in robots]
+        # constraints.append(u[:, 0] == u_init)  # Vincolo per lo stato iniziale degli operatori
+        # o_init = [1 if r.has_offloaded() else 0 for r in robots]
+        # constraints.append(o[:, 0] == o_init)  # Vincolo per lo stato iniziale dell'offloading
         
         for t in range(T - 1):
             for i in range(N):
                 constraints.append(x[i, t+1] == x[i, t] + charge_rate * (1 - u[i, t]) - consume_rate * u[i, t] - computation_cost * (u[i, t] - o[i, t]))
-                constraints.append(x[i, t+1] >= b_low)
-                constraints.append(x[i, t+1] <= b_high)
+                constraints.append(x[i, t] >= b_low)
+                constraints.append(x[i, t] <= b_high)
                 
                 constraints.append(o[i, t] <= u[i, t])
             
@@ -84,12 +84,27 @@ class Allocator:
             objective = cp.Maximize(cp.sum(u))
         elif self.allocation_policy is AllocationPolicy.MPC_REDUCE_FLIP_A1:
             objective = cp.Maximize(cp.sum(u) - cp.sum(cp.abs(u[:, 1:] - u[:, :-1])))
+        elif self.allocation_policy is AllocationPolicy.TEST:
+            objective = cp.Minimize(cp.sum(cp.abs(u[:, 1:] - u[:, :-1])))
         
         # Risoluzione del problema
         problem = cp.Problem(objective, constraints)
         solver = cp.GUROBI if "GUROBI" in cp.installed_solvers() else "SCIP" if "SCIP" in cp.installed_solvers() else "GLPK_MI"
-        problem.solve(solver=solver, TimeLimit=20)
+        problem.solve(solver=solver, TimeLimit=20, OutputFlag=0, LogToConsole=0)
+
+        if x.value is None:
+            return None, None, None
         
+        # count = 0
+        # for i in range(len(x.value)):
+        #     cur_value = x.value[i][0]
+        #     for j in range(1, len(x.value[i])):
+        #         if x.value[i][j] != cur_value:
+        #             count += 1
+        #             cur_value = x.value[i][j]
+        
+        # print(f"Number of changes: {count}")
+                
         return x.value, u.value, o.value#, w.value
     
     def find_best_allocation_new(self, robots): 
