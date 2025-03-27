@@ -1,5 +1,18 @@
+from enum import Enum
 import numpy as np
 import heapq
+import random
+
+class MoveComputationPolicy(Enum):
+    NONE = 0
+    LARGEST_BATTERY = 1
+    SMALLEST_BATTERY = 2
+    RANDOM = 3
+
+    def __str__(self):
+        if self.value == MoveComputationPolicy.NONE.value:
+            return "Reference"
+        return self.name.title()
 
 def compute_adjacency_matrix(n_robots, probability):
     adjacency_matrix = np.zeros((n_robots, n_robots))
@@ -51,7 +64,7 @@ def count_missed_offload(allocation, battery_level, status):
             missed_offload += 1
     return missed_offload
 
-def tick(res, robots, operating_threshold, charging_threshold, delay_enabled):
+def tick(res, robots, operating_threshold, charging_threshold):
     available_robots_ids = []
     target_for_operating = []
         
@@ -70,11 +83,7 @@ def tick(res, robots, operating_threshold, charging_threshold, delay_enabled):
         # If battery level is above operating threshold and the robot is not already operating, set it to operate
         elif battery >= operating_threshold and r_status != "operating":
             # Set the robot to operate
-            #robot.operate()
-            if len(target_for_operating) < 1 and delay_enabled:
-                target_for_operating.append(id)
-            else:
-                robot.operate()
+            robot.operate()
         else:
             # If the robot is not hosting a task and it is currently charging, add it to the available robots list
             if not robot.is_hosting() and r_status == "charging":
@@ -82,7 +91,7 @@ def tick(res, robots, operating_threshold, charging_threshold, delay_enabled):
     
     return available_robots_ids, target_for_operating
 
-def move_computation(available_robots_ids, robots, adjacency_matrix):
+def move_computation(available_robots_ids, robots, adjacency_matrix, policy):
     """
     Perform move computation for available robots.
 
@@ -91,6 +100,9 @@ def move_computation(available_robots_ids, robots, adjacency_matrix):
     """
     for i in available_robots_ids:
         robot = robots[i]
+
+        if i == 15:
+            pass
         
         # Skip if the robot is charging or already hosting a task
         if robot.is_hosting():
@@ -103,10 +115,41 @@ def move_computation(available_robots_ids, robots, adjacency_matrix):
         for _, ids in distances.items():
             if found:
                 break
+            
+            sorted_ids = sort_ids(ids, robots, policy)
                 
-            for id in ids:
+            for id in sorted_ids:
                 if not robots[id].has_offloaded() and robots[id].get_status() == "operating":
                     robots[id].offload(robot)
                     assert robot.host(robots[id].get_self_task()) != False
                     found = True
                     break
+                
+def sort_ids(ids, robots, policy):
+    if policy is MoveComputationPolicy.NONE:
+        return ids
+    
+    if policy is MoveComputationPolicy.RANDOM:
+        random.shuffle(ids)
+        return ids
+    
+    sorted_ids = []
+    if policy is MoveComputationPolicy.LARGEST_BATTERY or policy is MoveComputationPolicy.SMALLEST_BATTERY:
+        for id in ids:
+            if len(sorted_ids) == 0:
+                sorted_ids.append(id)
+            else:
+                target = None
+                for id2 in sorted_ids:
+                    if robots[id].get_battery_percentage() <= robots[id2].get_battery_percentage():
+                        target = id2
+                        break
+                if target is not None:
+                    sorted_ids.insert(target, id)
+                else:
+                    sorted_ids.append(id)
+                    
+        if policy is MoveComputationPolicy.LARGEST_BATTERY:
+            sorted_ids.reverse()
+            
+    return sorted_ids
