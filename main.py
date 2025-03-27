@@ -17,7 +17,7 @@ small_config = {
 }
 
 medium_config = {
-    "n_robots": 10,
+    "n_robots": 12,
     "charge_rate": 65, # 65Wh
     "discharge_rate": 25, # 25Wh 
     #"discharge_rate": 0,
@@ -52,10 +52,10 @@ config = {
 
 if __name__ == "__main__":
     duration = 1500
-    n_run = 1
+    n_run = 2
 
     # Run the simulation to get the values for the battery optimmization
-    s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY], allocation_strategies=[AllocationStrategy(AllocationPolicy.MPC, optimize_computation_frequency=1, optimize_computation_window=25)], report_dir="results")
+    s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY], allocation_strategies=[AllocationStrategy(AllocationPolicy.MPC, optimize_computation_frequency=1, optimize_computation_window=25), AllocationStrategy(AllocationPolicy.MPC_REDUCE_FLIP_A1, optimize_computation_frequency=1, optimize_computation_window=25)], report_dir="results")
     s.run(duration)
             
         

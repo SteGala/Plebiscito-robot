@@ -117,7 +117,7 @@ class Simulator:
             for allocation_strategy in self.allocation_strategies:
                 self.robots = copy.deepcopy(self.__robots_backup)
                 self.move_computation_policy = None
-                self.allocator = Allocator(len(self.robots), allocation_strategy)
+                self.allocator = Allocator(len(self.robots), allocation_strategy, charging_threshold=self.charging_threshold, operating_threshold=self.operating_threshold)
                 self.optimize_computation_frequency = allocation_strategy.optimize_computation_frequency
                 self.optimize_computation_window = allocation_strategy.optimize_computation_window
                 self.__run(epochs, it+offset)
@@ -167,6 +167,12 @@ class Simulator:
             r.tick()
         
         _, status, offload = self.allocator.find_best_allocation_new(copy.deepcopy(self.robots))
+        
+        if status is None:
+            return
+        
+        status = status[:, 1]
+        offload = offload[:, 1]
         
         for r in self.robots:
             r.unhost()
