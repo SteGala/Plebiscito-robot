@@ -34,6 +34,10 @@ class Allocator:
         self.allocation_policy = alloc_strategy.alloc
         self.charging_threshold = charging_threshold
         self.operating_threshold = operating_threshold
+        
+        self.x = None
+        self.u = None
+        self.o = None
             
         if self.allocation_policy is AllocationPolicy.MPC or self.allocation_policy is AllocationPolicy.MPC_REDUCE_FLIP_A1 or self.allocation_policy is AllocationPolicy.TEST:
             pass
@@ -55,26 +59,41 @@ class Allocator:
         b_low = self.charging_threshold * max_battery
         b_high = self.operating_threshold * max_battery
         
+        # something went wrong, reset the state
+        if self.x is not None:
+            for id, r in enumerate(robots):
+                if r.get_battery_level() != self.x[id][1]:
+                    self.x = None
+                    self.u = None
+                    self.o = None
+                    break
+        
         # Variabili decisionali
         x = cp.Variable((N, T))  # Livello di batteria per ogni robot nel tempo
         u = cp.Variable((N, T), boolean=True)  # 1 se il robot è operativo, 0 se è in carica
         o = cp.Variable((N, T), boolean=True)  # 1 se il robot sta offloadando, 0 altrimenti
         
         constraints = []
+        start_id = 0
         
-        # Stato iniziale (vincolo invece di assegnazione diretta)
-        x_init = [r.get_battery_level() for r in robots]
-        constraints.append(x[:, 0] == x_init)  # Vincolo per i livelli iniziali della batteria
-        # u_init = [1 if r.get_status() == "operating" else 0 for r in robots]
-        # constraints.append(u[:, 0] == u_init)  # Vincolo per lo stato iniziale degli operatori
-        # o_init = [1 if r.has_offloaded() else 0 for r in robots]
-        # constraints.append(o[:, 0] == o_init)  # Vincolo per lo stato iniziale dell'offloading
+        if self.x is None:
+            # Stato iniziale (vincolo invece di assegnazione diretta)
+            x_init = [r.get_battery_level() for r in robots]
+            constraints.append(x[:, 0] == x_init)  # Vincolo per i livelli iniziali della batteria
+        else:
+            for t in range(T - 2):
+                # print(type(list(self.x[i, 1:])), list(self.x[i, 1:]))
+                constraints.append(x[:, t] == list(self.x[:, t+1]))
+                constraints.append(u[:, t] == list(self.u[:, t+1]))
+                constraints.append(o[:, t] == list(self.o[:, t+1]))
+            
+            start_id = T - 2
         
-        for t in range(T - 1):
+        for t in range(start_id, T - 1):
             for i in range(N):
                 constraints.append(x[i, t+1] == x[i, t] + charge_rate * (1 - u[i, t]) - consume_rate * u[i, t] - computation_cost * (u[i, t] - o[i, t]))
-                constraints.append(x[i, t] >= b_low)
-                constraints.append(x[i, t] <= b_high)
+                constraints.append(x[i, t+1] >= b_low)
+                constraints.append(x[i, t+1] <= b_high)
                 
                 constraints.append(o[i, t] <= u[i, t])
             
@@ -93,19 +112,26 @@ class Allocator:
         problem.solve(solver=solver, TimeLimit=20, OutputFlag=0, LogToConsole=0)
 
         if x.value is None:
-            return None, None, None
+            pass
+        assert x.value is not None
         
         # count = 0
-        # for i in range(len(x.value)):
-        #     cur_value = x.value[i][0]
-        #     for j in range(1, len(x.value[i])):
-        #         if x.value[i][j] != cur_value:
+        # for i in range(len(u.value)):
+        #     cur_value = u.value[i][0]
+        #     for j in range(1, len(u.value[i])):
+        #         if u.value[i][j] != cur_value:
         #             count += 1
-        #             cur_value = x.value[i][j]
+        #             cur_value = u.value[i][j]
         
         # print(f"Number of changes: {count}")
+        
+        #print(x.value)
+        
+        self.x = copy.deepcopy(x.value)
+        self.u = copy.deepcopy(u.value)
+        self.o = copy.deepcopy(o.value)
                 
-        return x.value, u.value, o.value#, w.value
+        return x.value[:, 0], u.value[:, 0], o.value[:, 0]#, w.value
     
     def find_best_allocation_new(self, robots): 
         return self.__mpc(robots)

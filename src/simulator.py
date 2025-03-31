@@ -168,12 +168,6 @@ class Simulator:
         
         _, status, offload = self.allocator.find_best_allocation_new(copy.deepcopy(self.robots))
         
-        if status is None:
-            return
-        
-        status = status[:, 0]
-        offload = offload[:, 0]
-        
         for r in self.robots:
             r.unhost()
             r.unoffload()
