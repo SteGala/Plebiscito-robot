@@ -66,7 +66,6 @@ def count_missed_offload(allocation, battery_level, status):
 
 def tick(res, robots, operating_threshold, charging_threshold):
     available_robots_ids = []
-    target_for_operating = []
         
     # Iterate over each robot
     for id, robot in enumerate(robots):
@@ -89,7 +88,7 @@ def tick(res, robots, operating_threshold, charging_threshold):
             if not robot.is_hosting() and r_status == "charging":
                 available_robots_ids.append(id)
     
-    return available_robots_ids, target_for_operating
+    return available_robots_ids
 
 def move_computation(available_robots_ids, robots, adjacency_matrix, policy):
     """

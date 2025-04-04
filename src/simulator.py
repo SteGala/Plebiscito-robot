@@ -131,7 +131,7 @@ class Simulator:
             res[r.name] = []
             
         for ep in tqdm(range(epochs), desc = 'Simulating epoch: ', smoothing=0):
-            # if ep == 55:
+            # if ep == 24:
             #     self.print_infrastructure(ep)
                 
             self.progress_simulation(res, self.robots, ep)
@@ -151,13 +151,10 @@ class Simulator:
     def progress_simulation(self, res, robots, ep):                                
         # Use available robots to host tasks
         if self.move_computation_policy is not None:
-            available_robots_ids, target_for_operating = tick(res, robots, self.operating_threshold, self.charging_threshold)
+            available_robots_ids = tick(res, robots, self.operating_threshold, self.charging_threshold)
                     
-            if len(target_for_operating) > 0:
-                for id in target_for_operating:
-                    robots[id].operate()
-                    
-            move_computation(available_robots_ids, robots, self.adjacency_matrix, self.move_computation_policy)
+            if self.move_computation_policy != MoveComputationPolicy.NONE:
+                move_computation(available_robots_ids, robots, self.adjacency_matrix, self.move_computation_policy)
             
         if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0:
             self.optimize_computation(ep)
@@ -308,7 +305,7 @@ class Simulator:
         if self.move_computation_policy is not None:
             conf = str(self.move_computation_policy)
         else:
-            conf = str(self.allocator.allocation_policy)
+            conf = str(self.allocator.allocation_policy) + f"_{self.optimize_computation_window}"
 
         # Create the directory if it doesn't exist
         if not os.path.exists(f"{self.sim_name}/{iter}/{conf}"):

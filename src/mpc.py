@@ -8,17 +8,33 @@ import cvxpy as cp
 
 class AllocationPolicy(Enum):
     MPC = 1
-    MPC_REDUCE_FLIP_A1 = 2
-    TEST = 3
-    NONE = 3
+    MPC_INCREMENTAL = 2
+    MPC_INCREMENTAL2 = 3
+    MPC_INCREMENTAL3 = 4
+    MPC_INCREMENTAL4 = 5
+    MPC_INCREMENTAL5 = 6
+    MPC_INCREMENTAL6 = 7
+    MPC_INCREMENTAL7 = 8
 
     def __str__(self):
         if self is AllocationPolicy.MPC:
             return "MPC"
-        elif self is AllocationPolicy.MPC_REDUCE_FLIP_A1:
-            return "MPC_REDUCE_FLIP_ALPA1"
-        elif self is AllocationPolicy.NONE:
-            return ""
+        elif self is AllocationPolicy.MPC_INCREMENTAL:
+            return "MPC_INC1"
+        elif self is AllocationPolicy.MPC_INCREMENTAL2:
+            return "MPC_INC2"
+        elif self is AllocationPolicy.MPC_INCREMENTAL3:
+            return "MPC_INC3"
+        elif self is AllocationPolicy.MPC_INCREMENTAL4:
+            return "MPC_INC4"
+        elif self is AllocationPolicy.MPC_INCREMENTAL5:
+            return "MPC_INC5"
+        elif self is AllocationPolicy.MPC_INCREMENTAL6:
+            return "MPC_INC6"
+        elif self is AllocationPolicy.MPC_INCREMENTAL7:
+            return "MPC_INC7"
+        else:
+            return "UNKNOWN"
 
 class AllocationStrategy:
     def __init__(self, alloc, optimize_computation_frequency=50, optimize_computation_window=50, num_processes=1) -> None:
@@ -39,12 +55,6 @@ class Allocator:
         self.u = None
         self.o = None
             
-        if self.allocation_policy is AllocationPolicy.MPC or self.allocation_policy is AllocationPolicy.MPC_REDUCE_FLIP_A1 or self.allocation_policy is AllocationPolicy.TEST:
-            pass
-        else:
-            print(f"Allocation policy {self.allocation_policy} not yet supported.")
-            sys.exit(1)
-
     def terminate(self):
         pass
     
@@ -81,30 +91,44 @@ class Allocator:
             x_init = [r.get_battery_level() for r in robots]
             constraints.append(x[:, 0] == x_init)  # Vincolo per i livelli iniziali della batteria
         else:
-            for t in range(T - 2):
+            end_idx = 0
+            if self.allocation_policy is AllocationPolicy.MPC_INCREMENTAL:
+                end_idx = T - 2
+            elif self.allocation_policy is AllocationPolicy.MPC_INCREMENTAL2:
+                end_idx = T - 3
+            elif self.allocation_policy is AllocationPolicy.MPC_INCREMENTAL3:
+                end_idx = T - 4
+            elif self.allocation_policy is AllocationPolicy.MPC_INCREMENTAL4:
+                end_idx = T - 5
+            elif self.allocation_policy is AllocationPolicy.MPC_INCREMENTAL5:
+                end_idx = T - 6
+            elif self.allocation_policy is AllocationPolicy.MPC_INCREMENTAL6:
+                end_idx = T - 7
+            elif self.allocation_policy is AllocationPolicy.MPC_INCREMENTAL7:
+                end_idx = T - 8
+
+            for t in range(end_idx):
                 # print(type(list(self.x[i, 1:])), list(self.x[i, 1:]))
                 constraints.append(x[:, t] == list(self.x[:, t+1]))
                 constraints.append(u[:, t] == list(self.u[:, t+1]))
                 constraints.append(o[:, t] == list(self.o[:, t+1]))
             
-            start_id = T - 2
+            start_id = end_idx - 1
         
         for t in range(start_id, T - 1):
             for i in range(N):
                 constraints.append(x[i, t+1] == x[i, t] + charge_rate * (1 - u[i, t]) - consume_rate * u[i, t] - computation_cost * (u[i, t] - o[i, t]))
-                constraints.append(x[i, t+1] >= b_low)
-                constraints.append(x[i, t+1] <= b_high)
+                # constraints.append(x[i, t+1] >= b_low)
+                # constraints.append(x[i, t+1] <= b_high)
                 
                 constraints.append(o[i, t] <= u[i, t])
             
             constraints.append(cp.sum(o[:, t]) <= N - cp.sum(u[:, t]))
+
+        constraints.append(cp.max(x) <= b_high)
+        constraints.append(cp.min(x) >= b_low)
         
-        if self.allocation_policy is AllocationPolicy.MPC:    
-            objective = cp.Maximize(cp.sum(u))
-        elif self.allocation_policy is AllocationPolicy.MPC_REDUCE_FLIP_A1:
-            objective = cp.Maximize(cp.sum(u) - cp.sum(cp.abs(u[:, 1:] - u[:, :-1])))
-        elif self.allocation_policy is AllocationPolicy.TEST:
-            objective = cp.Minimize(cp.sum(cp.abs(u[:, 1:] - u[:, :-1])))
+        objective = cp.Maximize(cp.sum(u))
         
         # Risoluzione del problema
         problem = cp.Problem(objective, constraints)
@@ -115,21 +139,10 @@ class Allocator:
             pass
         assert x.value is not None
         
-        # count = 0
-        # for i in range(len(u.value)):
-        #     cur_value = u.value[i][0]
-        #     for j in range(1, len(u.value[i])):
-        #         if u.value[i][j] != cur_value:
-        #             count += 1
-        #             cur_value = u.value[i][j]
-        
-        # print(f"Number of changes: {count}")
-        
-        #print(x.value)
-        
-        self.x = copy.deepcopy(x.value)
-        self.u = copy.deepcopy(u.value)
-        self.o = copy.deepcopy(o.value)
+        if self.allocation_policy is AllocationPolicy.MPC_INCREMENTAL or self.allocation_policy is AllocationPolicy.MPC_INCREMENTAL2:
+            self.x = copy.deepcopy(x.value)
+            self.u = copy.deepcopy(u.value)
+            self.o = copy.deepcopy(o.value)
                 
         return x.value[:, 0], u.value[:, 0], o.value[:, 0]#, w.value
     
