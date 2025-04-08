@@ -17,7 +17,7 @@ small_config = {
 }
 
 medium_config = {
-    "n_robots": 10,
+    "n_robots": 15,
     "charge_rate": 65, # 65Wh
     "discharge_rate": 25, # 25Wh 
     #"discharge_rate": 0,
@@ -51,7 +51,7 @@ config = {
 # Note: every time instant represent one minute of simulation, therefore, the total_battery is multiplied by 60 to get the total battery
 
 if __name__ == "__main__":
-    duration = 5000
+    duration = 200
     n_run = 1
 
     # Run the simulation to get the values for the battery optimmization
@@ -61,27 +61,37 @@ if __name__ == "__main__":
         move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY],
         allocation_strategies=[
             AllocationStrategy(
-                AllocationPolicy.MPC_INCREMENTAL3,
+                AllocationPolicy.MPC_INCREMENTAL,
                 optimize_computation_frequency=1,
                 optimize_computation_window=20,
-            ),
-            AllocationStrategy(
-                AllocationPolicy.MPC_INCREMENTAL3,
-                optimize_computation_frequency=1,
-                optimize_computation_window=40,
-            ),
-            AllocationStrategy(
-                AllocationPolicy.MPC_INCREMENTAL3,
-                optimize_computation_frequency=1,
-                optimize_computation_window=60,
-            ),
-            AllocationStrategy(
-                AllocationPolicy.MPC_INCREMENTAL3,
-                optimize_computation_frequency=1,
-                optimize_computation_window=80,
-            )
+            )#,
+            # AllocationStrategy(
+            #     AllocationPolicy.MPC_INCREMENTAL2,
+            #     optimize_computation_frequency=1,
+            #     optimize_computation_window=40,
+            # ),
+            # AllocationStrategy(
+            #     AllocationPolicy.MPC_INCREMENTAL3,
+            #     optimize_computation_frequency=1,
+            #     optimize_computation_window=20,
+            # ),
+            # AllocationStrategy(
+            #     AllocationPolicy.MPC_INCREMENTAL3,
+            #     optimize_computation_frequency=1,
+            #     optimize_computation_window=40,
+            # ),
+            # AllocationStrategy(
+            #     AllocationPolicy.MPC_INCREMENTAL4,
+            #     optimize_computation_frequency=1,
+            #     optimize_computation_window=20,
+            # ),
+            # AllocationStrategy(
+            #     AllocationPolicy.MPC_INCREMENTAL4,
+            #     optimize_computation_frequency=1,
+            #     optimize_computation_window=40,
+            # )
         ],
-        report_dir="results_40",
+        report_dir="results",
     )
     # s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY], report_dir="results")
 

@@ -1,4 +1,5 @@
 import copy
+import json
 from src.robot import Robot
 from src.mpc import Allocator, AllocationPolicy
 import random
@@ -125,14 +126,23 @@ class Simulator:
     def __run(self, epochs, iter):
         res = {}
         self.epochs = epochs
+
+        x = []
+        u = []
+        o = []
         
         # Initialize a dictionary to store battery levels for each robot
         for r in self.robots:
             res[r.name] = []
+            x.append([])
+            u.append([])
+            o.append([])
             
         for ep in tqdm(range(epochs), desc = 'Simulating epoch: ', smoothing=0):
-            # if ep == 24:
-            #     self.print_infrastructure(ep)
+            for id, r in enumerate(self.robots):
+                x[id].append(r.get_battery_level())
+                u[id].append(1 if r.get_status() == "operating" else 0)
+                o[id].append(1 if r.has_offloaded() else 0)
                 
             self.progress_simulation(res, self.robots, ep)
                 
@@ -142,11 +152,33 @@ class Simulator:
             assert self.check_infrastructure(), self.print_infrastructure(ep)
             self.update_stats(ep)
 
+        if self.allocator is None and self.move_computation_policy != MoveComputationPolicy.NONE:
+            with open("tmp", "w") as f:
+                json.dump(self.marshal_variables(x, u, o), f, indent=4)
+
         if self.allocator is not None:
             self.allocator.terminate()
             
         self.dump_report(iter) 
         # self.plot_results(res)
+    
+    def marshal_variables(self, x, u, o):
+        """
+        Serialize the variables x, u, and o into a dictionary.
+
+        Args:
+            x (list): Battery levels of robots over time.
+            u (list): Operating status of robots over time.
+            o (list): Offloading status of robots over time.
+
+        Returns:
+            dict: Serialized representation of x, u, and o.
+        """
+        return {
+            "x": x,
+            "u": u,
+            "o": o
+        }
         
     def progress_simulation(self, res, robots, ep):                                
         # Use available robots to host tasks
@@ -163,7 +195,7 @@ class Simulator:
         for r in self.robots:
             r.tick()
         
-        _, status, offload = self.allocator.find_best_allocation_new(copy.deepcopy(self.robots))
+        _, status, offload = self.allocator.find_best_allocation_new(copy.deepcopy(self.robots), ep)
         
         for r in self.robots:
             r.unhost()

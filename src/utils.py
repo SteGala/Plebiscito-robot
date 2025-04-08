@@ -99,9 +99,6 @@ def move_computation(available_robots_ids, robots, adjacency_matrix, policy):
     """
     for i in available_robots_ids:
         robot = robots[i]
-
-        if i == 15:
-            pass
         
         # Skip if the robot is charging or already hosting a task
         if robot.is_hosting():
