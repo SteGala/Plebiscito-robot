@@ -120,7 +120,7 @@ class Simulator:
             for allocation_strategy in self.allocation_strategies:
                 self.robots = copy.deepcopy(self.__robots_backup)
                 self.move_computation_policy = None
-                self.allocator = Allocator(len(self.robots), allocation_strategy, charging_threshold=self.charging_threshold, operating_threshold=self.operating_threshold)
+                self.allocator = Allocator(len(self.robots), allocation_strategy, charging_threshold=self.charging_threshold, operating_threshold=self.operating_threshold, tot_epochs=epochs)
                 self.optimize_computation_frequency = allocation_strategy.optimize_computation_frequency
                 self.optimize_computation_window = allocation_strategy.optimize_computation_window
                 self.__run(epochs, it+offset)
@@ -154,8 +154,17 @@ class Simulator:
             assert self.check_infrastructure(), self.print_infrastructure(ep)
             self.update_stats(ep)
 
+        for id, r in enumerate(self.robots):
+            x[id].append(r.get_battery_level())
+            u[id].append(1 if r.get_status() == "operating" else 0)
+            o[id].append(1 if r.has_offloaded() else 0)
+
         if self.allocator is None and self.move_computation_policy != MoveComputationPolicy.NONE:
-            with open("tmp", "w") as f:
+            with open("tmp-bat", "w") as f:
+                json.dump(self.marshal_variables(x, u, o), f, indent=4)
+
+        if self.allocator is not None:
+            with open("tmp-mpc", "w") as f:
                 json.dump(self.marshal_variables(x, u, o), f, indent=4)
 
         if self.allocator is not None:

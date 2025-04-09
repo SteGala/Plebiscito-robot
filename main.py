@@ -51,7 +51,7 @@ config = {
 # Note: every time instant represent one minute of simulation, therefore, the total_battery is multiplied by 60 to get the total battery
 
 if __name__ == "__main__":
-    duration = 200
+    duration = 1000
     n_run = 1
 
     # Run the simulation to get the values for the battery optimmization
