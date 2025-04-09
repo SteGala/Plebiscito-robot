@@ -1,5 +1,7 @@
 import copy
 import json
+
+import numpy as np
 from src.robot import Robot
 from src.mpc import Allocator, AllocationPolicy
 import random
