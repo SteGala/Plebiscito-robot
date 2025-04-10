@@ -51,8 +51,8 @@ config = {
 # Note: every time instant represent one minute of simulation, therefore, the total_battery is multiplied by 60 to get the total battery
 
 if __name__ == "__main__":
-    duration = 1000
-    n_run = 1
+    duration = 10000
+    n_run = 2
 
     # Run the simulation to get the values for the battery optimmization
     s = Simulator(
@@ -61,37 +61,67 @@ if __name__ == "__main__":
         move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY],
         allocation_strategies=[
             AllocationStrategy(
-                AllocationPolicy.MPC_INCREMENTAL,
+                AllocationPolicy.MPC_OPT_OP,
                 optimize_computation_frequency=1,
-                optimize_computation_window=20,
-            )#,
+                optimize_computation_window=30,
+                increment=1,
+            ),
+            AllocationStrategy(
+                AllocationPolicy.MPC_OPT_OF,
+                optimize_computation_frequency=1,
+                optimize_computation_window=30,
+                increment=1,
+            ),
             # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL2,
+            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OF,
             #     optimize_computation_frequency=1,
-            #     optimize_computation_window=40,
+            #     optimize_computation_window=30,
+            #     increment=1,
             # ),
             # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL3,
+            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OP,
             #     optimize_computation_frequency=1,
-            #     optimize_computation_window=20,
+            #     optimize_computation_window=30,
+            #     increment=1,
             # ),
             # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL3,
+            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OF,
             #     optimize_computation_frequency=1,
-            #     optimize_computation_window=40,
+            #     optimize_computation_window=30,
+            #     increment=3,
             # ),
             # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL4,
+            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OP,
             #     optimize_computation_frequency=1,
-            #     optimize_computation_window=20,
+            #     optimize_computation_window=30,
+            #     increment=3,
             # ),
             # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL4,
+            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OF,
             #     optimize_computation_frequency=1,
-            #     optimize_computation_window=40,
-            # )
+            #     optimize_computation_window=30,
+            #     increment=5,
+            # ),
+            # AllocationStrategy(
+            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OP,
+            #     optimize_computation_frequency=1,
+            #     optimize_computation_window=30,
+            #     increment=5,
+            # ),
+            # AllocationStrategy(
+            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OF,
+            #     optimize_computation_frequency=1,
+            #     optimize_computation_window=30,
+            #     increment=7,
+            # ),
+            # AllocationStrategy(
+            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OP,
+            #     optimize_computation_frequency=1,
+            #     optimize_computation_window=30,
+            #     increment=7,
+            # ),
         ],
-        report_dir="results",
+        report_dir="results2",
     )
     # s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY], report_dir="results")
 

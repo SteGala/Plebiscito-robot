@@ -141,10 +141,10 @@ class Simulator:
             o.append([])
             
         for ep in tqdm(range(epochs), desc = 'Simulating epoch: ', smoothing=0):
-            for id, r in enumerate(self.robots):
-                x[id].append(r.get_battery_level())
-                u[id].append(1 if r.get_status() == "operating" else 0)
-                o[id].append(1 if r.has_offloaded() else 0)
+            # for id, r in enumerate(self.robots):
+            #     x[id].append(r.get_battery_level())
+            #     u[id].append(1 if r.get_status() == "operating" else 0)
+            #     o[id].append(1 if r.has_offloaded() else 0)
                 
             self.progress_simulation(res, self.robots, ep)
                 
@@ -154,18 +154,18 @@ class Simulator:
             assert self.check_infrastructure(), self.print_infrastructure(ep)
             self.update_stats(ep)
 
-        for id, r in enumerate(self.robots):
-            x[id].append(r.get_battery_level())
-            u[id].append(1 if r.get_status() == "operating" else 0)
-            o[id].append(1 if r.has_offloaded() else 0)
+        # for id, r in enumerate(self.robots):
+        #     x[id].append(r.get_battery_level())
+        #     u[id].append(1 if r.get_status() == "operating" else 0)
+        #     o[id].append(1 if r.has_offloaded() else 0)
 
-        if self.allocator is None and self.move_computation_policy != MoveComputationPolicy.NONE:
-            with open("tmp-bat", "w") as f:
-                json.dump(self.marshal_variables(x, u, o), f, indent=4)
+        # if self.allocator is None and self.move_computation_policy != MoveComputationPolicy.NONE:
+        #     with open("tmp-bat", "w") as f:
+        #         json.dump(self.marshal_variables(x, u, o), f, indent=4)
 
-        if self.allocator is not None:
-            with open("tmp-mpc", "w") as f:
-                json.dump(self.marshal_variables(x, u, o), f, indent=4)
+        # if self.allocator is not None:
+        #     with open("tmp-mpc", "w") as f:
+        #         json.dump(self.marshal_variables(x, u, o), f, indent=4)
 
         if self.allocator is not None:
             self.allocator.terminate()
@@ -214,10 +214,12 @@ class Simulator:
 
         charging_ids = []
         for id, s in enumerate(status):
-            if s == 1:
+            if s == 1 and self.robots[id].get_status() == "charging":
                 self.robots[id].operate()
-            else:
+            elif s == 0 and self.robots[id].get_status() == "operating":
                 self.robots[id].charge()
+
+            if self.robots[id].get_status() == "charging":
                 charging_ids.append(id)
         
         for id, o in enumerate(offload):
@@ -348,7 +350,10 @@ class Simulator:
         if self.move_computation_policy is not None:
             conf = str(self.move_computation_policy)
         else:
-            conf = str(self.allocator.allocation_policy) + f"_{self.optimize_computation_window}"
+            if self.allocator.allocation_policy is AllocationPolicy.MPC_INCREMENTAL_OPT_OP or self.allocator.allocation_policy is AllocationPolicy.MPC_INCREMENTAL_OPT_OF:
+                conf = str(self.allocator.allocation_policy) + str(self.allocator.alloc_strategy.increment) + f"_{self.optimize_computation_window}"
+            if self.allocator.allocation_policy is AllocationPolicy.MPC_OPT_OP or self.allocator.allocation_policy is AllocationPolicy.MPC_OPT_OF:
+                conf = str(self.allocator.allocation_policy) + f"_{self.optimize_computation_window}"
 
         # Create the directory if it doesn't exist
         if not os.path.exists(f"{self.sim_name}/{iter}/{conf}"):
