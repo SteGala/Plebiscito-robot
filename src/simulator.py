@@ -110,6 +110,7 @@ class Simulator:
             self.__run(epochs, it+offset)
 
             for move_computation_policy in self.move_computation_policies:
+                self.initialize_stats()   
                 self.allocator = None
                 self.robots = copy.deepcopy(self.__robots_backup)
                 self.move_computation_policy = move_computation_policy
@@ -118,6 +119,7 @@ class Simulator:
                 self.__run(epochs, it+offset)
                 
             for allocation_strategy in self.allocation_strategies:
+                self.initialize_stats()   
                 self.robots = copy.deepcopy(self.__robots_backup)
                 self.move_computation_policy = None
                 self.allocator = Allocator(len(self.robots), allocation_strategy, charging_threshold=self.charging_threshold, operating_threshold=self.operating_threshold, tot_epochs=epochs)
@@ -146,7 +148,7 @@ class Simulator:
             #     u[id].append(1 if r.get_status() == "operating" else 0)
             #     o[id].append(1 if r.has_offloaded() else 0)
                 
-            self.progress_simulation(res, self.robots, ep)
+            self.progress_simulation(res, ep)
                 
             for r in self.robots:
                 r.update_computation()
@@ -191,13 +193,13 @@ class Simulator:
             "o": o
         }
         
-    def progress_simulation(self, res, robots, ep):                                
+    def progress_simulation(self, res, ep):                                
         # Use available robots to host tasks
         if self.move_computation_policy is not None:
-            available_robots_ids = tick(res, robots, self.operating_threshold, self.charging_threshold)
+            available_robots_ids = tick(res, self.robots, self.operating_threshold, self.charging_threshold)
                     
             if self.move_computation_policy != MoveComputationPolicy.NONE:
-                move_computation(available_robots_ids, robots, self.adjacency_matrix, self.move_computation_policy)
+                move_computation(available_robots_ids, self.robots, self.adjacency_matrix, self.move_computation_policy)
             
         if self.optimize_computation_frequency is not None and ep%self.optimize_computation_frequency == 0:
             self.optimize_computation(ep)
@@ -247,51 +249,6 @@ class Simulator:
         
         return all_sol
             
-    def delay_operation(self, target_for_operating, robots, duration=5):
-        sol = self.compute_delay_solutions(target_for_operating, duration)
-        cur_best = 0
-        best_sol = []
-        best = 100000000000000000
-        
-        # self.print_infrastructure(0)
-        
-        # print(len(target_for_operating))
-        
-        for id, s in enumerate(sol):
-            rob = copy.deepcopy(robots)
-            s_backup = copy.deepcopy(s)
-            cur_best = 0
-            
-            for _ in range(duration*5):
-                for id, j in enumerate(target_for_operating):
-                    if s[id] > 0:
-                        rob[j].battery_level -= rob[j].discharge_rate
-                        s[id] -= 1
-                    else:
-                        rob[j].operate()
-                        
-                available_robot_ids, _ = tick({}, rob, self.operating_threshold, self.charging_threshold, False)
-                if self.move_computation_policy is not MoveComputationPolicy.NONE:
-                    move_computation(available_robot_ids, rob, self.adjacency_matrix, self.move_computation_policy)
-                
-                charging = 0
-                operating = 0
-                for r in rob:
-                    if r.get_status() == "charging":
-                        charging += 1
-                    elif r.get_status() == "operating":
-                        operating += 1
-                        
-                cur_best += (charging - operating) ** 2
-            
-            if cur_best < best:
-                best = cur_best
-                best_sol = s_backup
-                
-        for id, s in enumerate(best_sol):
-            if s == 0:
-                robots[target_for_operating[id]].operate()
-        
     def check_infrastructure(self): 
         count = 0
         for r in self.robots:   

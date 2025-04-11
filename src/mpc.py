@@ -59,6 +59,11 @@ class Allocator:
         
         b_low = self.charging_threshold * max_battery - consume_rate - computation_cost
         b_high = self.operating_threshold * max_battery + charge_rate
+        
+        if iter%T == 0:
+            self.x = None
+            self.u = None
+            self.o = None
 
         retry = 5
         while retry > 0:
