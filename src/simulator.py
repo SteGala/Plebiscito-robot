@@ -29,15 +29,15 @@ class Simulator:
         self.operating_threshold = config["operating_threshold"]
         self.__robots_backup = []
         self.move_computation_policies = move_computation_policies
-        if report_dir is None:
-            self.sim_name = "results-" + datetime.today().strftime('%Y-%m-%d-%H:%M:%S')
-        else:
-            self.sim_name = report_dir
+        # if report_dir is None:
+        #     self.sim_name = "results-" + datetime.today().strftime('%Y-%m-%d-%H:%M:%S')
+        # else:
+        self.sim_name = report_dir
         self.allocation_strategies = allocation_strategies
         self.config = config
         self.n_runs = run_number
 
-        if not os.path.exists(self.sim_name):
+        if self.sim_name is not None and not os.path.exists(self.sim_name):
             os.makedirs(self.sim_name)
         
         
@@ -88,9 +88,12 @@ class Simulator:
             epochs (int): Number of epochs to run the simulation.
         """
         offset = 0
-        for dir in os.listdir(self.sim_name):
-            if int(dir) > offset:
-                offset = int(dir)
+        if self.sim_name is not None:
+            for dir in os.listdir(self.sim_name):
+                if int(dir) > offset:
+                    offset = int(dir)
+        else:
+            report = {}
 
         if offset != 0:
             offset += 1
@@ -107,7 +110,9 @@ class Simulator:
             self.move_computation_policy = MoveComputationPolicy.NONE
             self.optimize_computation_frequency = None
             self.optimize_computation_window = None
-            self.__run(epochs, it+offset)
+            op = self.__run(epochs, it+offset)
+            if self.sim_name is None:
+                report["no_offload"] = op
 
             for move_computation_policy in self.move_computation_policies:
                 self.initialize_stats()   
@@ -116,7 +121,9 @@ class Simulator:
                 self.move_computation_policy = move_computation_policy
                 self.optimize_computation_frequency = None
                 self.optimize_computation_window = None
-                self.__run(epochs, it+offset)
+                op = self.__run(epochs, it+offset)
+                if self.sim_name is None:
+                    report["offload"] = op
                 
             for allocation_strategy in self.allocation_strategies:
                 self.initialize_stats()   
@@ -127,6 +134,9 @@ class Simulator:
                 self.optimize_computation_window = allocation_strategy.optimize_computation_window
                 self.__run(epochs, it+offset)
 
+        if self.sim_name is None:
+            return report
+        
     def __run(self, epochs, iter):
         res = {}
         self.epochs = epochs
@@ -171,8 +181,15 @@ class Simulator:
 
         if self.allocator is not None:
             self.allocator.terminate()
-            
-        self.dump_report(iter) 
+
+        if self.sim_name is not None:
+            self.dump_report(iter) 
+        else:
+            op_time = 0
+            for _, robot in enumerate(self.robots):
+                stat = robot.get_stats()
+                op_time += stat["operation_time"]
+            return op_time
         # self.plot_results(res)
     
     def marshal_variables(self, x, u, o):

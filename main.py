@@ -1,3 +1,5 @@
+import numpy as np
+import pandas as pd
 from src.mpc import AllocationPolicy, AllocationStrategy
 from src.utils import MoveComputationPolicy
 from src.simulator import Simulator
@@ -18,11 +20,11 @@ small_config = {
 
 medium_config = {
     "n_robots": 15,
-    "charge_rate": 65, # 65Wh
-    "discharge_rate": 25, # 25Wh 
+    "charge_rate": 20, # 65Wh
+    "discharge_rate": 20, # 25Wh 
     #"discharge_rate": 0,
     "total_battery": 220*60, # typically 220Wh then mutiply by 60 to get the total battery
-    "AI_computation": 20,
+    "AI_computation": 120,
     "charging_threshold": 0.05, 
     "operating_threshold": 0.95
 }
@@ -48,81 +50,46 @@ config = {
     "operating_threshold": 0.95
 }
 
+def compute_value(x, y, epochs, tot_battery, n_robot):
+    offload = epochs*(tot_battery/y)/((tot_battery/y) + (tot_battery/x))
+    return offload * n_robot
+
 # Note: every time instant represent one minute of simulation, therefore, the total_battery is multiplied by 60 to get the total battery
 
 if __name__ == "__main__":
-    duration = 10000
-    n_run = 2
+    duration = 20000
+    n_run = 1
 
-    # Run the simulation to get the values for the battery optimmization
-    s = Simulator(
-        run_number=n_run,
-        config=medium_config,
-        move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY],
-        allocation_strategies=[
-            AllocationStrategy(
-                AllocationPolicy.MPC_OPT_OP,
-                optimize_computation_frequency=1,
-                optimize_computation_window=30,
-                increment=1,
-            ),
-            AllocationStrategy(
-                AllocationPolicy.MPC_OPT_OF,
-                optimize_computation_frequency=1,
-                optimize_computation_window=30,
-                increment=1,
-            ),
-            # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OF,
-            #     optimize_computation_frequency=1,
-            #     optimize_computation_window=30,
-            #     increment=1,
-            # ),
-            # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OP,
-            #     optimize_computation_frequency=1,
-            #     optimize_computation_window=30,
-            #     increment=1,
-            # ),
-            # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OF,
-            #     optimize_computation_frequency=1,
-            #     optimize_computation_window=30,
-            #     increment=3,
-            # ),
-            # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OP,
-            #     optimize_computation_frequency=1,
-            #     optimize_computation_window=30,
-            #     increment=3,
-            # ),
-            # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OF,
-            #     optimize_computation_frequency=1,
-            #     optimize_computation_window=30,
-            #     increment=5,
-            # ),
-            # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OP,
-            #     optimize_computation_frequency=1,
-            #     optimize_computation_window=30,
-            #     increment=5,
-            # ),
-            # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OF,
-            #     optimize_computation_frequency=1,
-            #     optimize_computation_window=30,
-            #     increment=7,
-            # ),
-            # AllocationStrategy(
-            #     AllocationPolicy.MPC_INCREMENTAL_OPT_OP,
-            #     optimize_computation_frequency=1,
-            #     optimize_computation_window=30,
-            #     increment=7,
-            # ),
-        ],
-        report_dir="results2",
-    )
-    # s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY], report_dir="results")
+    results = []
 
-    s.run(duration)
+    charge = np.linspace(0.0001, 0.01, 30)
+    discharge = np.linspace(0.0001, 0.01, 30)
+    computation = np.linspace(0.0001, 0.01, 10)
+
+    for ch in charge:
+        for dis in discharge:
+            for comp in computation:
+                medium_config["charge_rate"] = medium_config["total_battery"] * ch 
+                medium_config["discharge_rate"] = medium_config["total_battery"] * dis
+                medium_config["AI_computation"] = medium_config["total_battery"] * comp
+
+                # Run the simulation to get the values for the battery optimmization
+                s = Simulator(
+                    run_number=n_run,
+                    config=medium_config,
+                    move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY],
+                )
+                # s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY], report_dir="results")
+
+                res = s.run(duration)
+                d = {}
+                d["charge_rate"] = ch
+                d["discharge_rate"] = dis
+                d["AI_computation"] = comp
+                d["offload"] = res["offload"]
+                d["no_offload"] = res["no_offload"]
+                d["best_offload"] = compute_value(medium_config["charge_rate"], medium_config["discharge_rate"], duration, 11880, 15)
+
+                results.append(d)
+
+    pd.DataFrame(results).to_csv("results.csv", index=False)
