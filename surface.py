@@ -5,12 +5,9 @@ import math
 
 import pandas as pd
 
-# Define the ranges for your variables
-charge_rate = np.linspace(0.0001, 0.01, 25)
-discharge_rate = np.linspace(0.0001, 0.01, 25)
-computation = np.linspace(0.0001, 0.01, 5)
+pd.set_option('display.float_format', '{:.19f}'.format)
 
-epochs = 10000
+epochs = 20000
 
 # Define your function - placeholder
 def compute_value(x, y, z):
@@ -28,10 +25,14 @@ def compute_no_offload(x, y, z, epochs):
 def compute_offload(x, y, z, epochs):
     return epochs*(1/y)/((1/y) + (1/x))
 
-def plot_heatmap(charge_rate, discharge_rate, computation, compute_value, filename=None):
-    X, Y = np.meshgrid(charge_rate, discharge_rate, indexing='ij')
+def plot_heatmap(compute_value, filename=None):
+    df = pd.read_csv(filename)
 
-    # Setup subplot layout
+    # Define the ranges for your variables
+    charge_rate = sorted(df["charge_rate"].unique())
+    discharge_rate = sorted(df["discharge_rate"].unique())
+    computation = sorted(df["AI_computation"].unique())
+
     n_plots = len(computation)
     n_cols = 5
     n_rows = math.ceil(n_plots / n_cols)
@@ -41,15 +42,15 @@ def plot_heatmap(charge_rate, discharge_rate, computation, compute_value, filena
     fig2, axes2 = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
     axes2 = axes2.flatten()  # Flatten in case it's a 2D array of axes
 
-    df = pd.read_csv(filename)
+    print(df)
     for id_z, z in enumerate(computation):
         a = np.zeros((len(charge_rate), len(discharge_rate)))
         a2 = np.zeros((len(charge_rate), len(discharge_rate)))
         for id_x, x in enumerate(charge_rate):
             for id_y, y in enumerate(discharge_rate):
-                best_offload = df[(df["charge_rate"] == round(x, 10)) & (df["discharge_rate"] == round(y, 10)) & (df["AI_computation"] == round(z, 10))]["best_offload"].values[0]
-                no_offload = df[(df["charge_rate"] == round(x, 10)) & (df["discharge_rate"] == round(y, 10)) & (df["AI_computation"] == round(z, 10))]["no_offload"].values[0]
-                impl_offload = df[(df["charge_rate"] == round(x, 10)) & (df["discharge_rate"] == round(y, 10)) & (df["AI_computation"] == round(z, 10))]["offload"].values[0]
+                best_offload = df[(df["charge_rate"] == x) & (df["discharge_rate"] == y) & (df["AI_computation"] == z)]["best_offload"].values[0]
+                no_offload = df[(df["charge_rate"] == x) & (df["discharge_rate"] == y) & (df["AI_computation"] == z)]["no_offload"].values[0]
+                impl_offload = df[(df["charge_rate"] == x) & (df["discharge_rate"] == y) & (df["AI_computation"] == z)]["offload"].values[0]
                 value = 100*(best_offload - no_offload) / best_offload
                 value2 = 100*(best_offload - impl_offload) / best_offload
 
@@ -79,7 +80,7 @@ def plot_heatmap(charge_rate, discharge_rate, computation, compute_value, filena
     fig.savefig("prova.png")
     fig2.savefig("prova2.png")
 
-plot_heatmap(charge_rate, discharge_rate, computation, compute_value, filename="results.csv")
+plot_heatmap(compute_value, filename="results.csv")
 # fig, ax = plt.subplots()
 
 # a = []
