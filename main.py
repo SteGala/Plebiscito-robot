@@ -62,9 +62,9 @@ if __name__ == "__main__":
 
     results = []
 
-    charge = np.linspace(0.0001, 0.01, 30)
-    discharge = np.linspace(0.0001, 0.01, 30)
-    computation = np.linspace(0.0001, 0.01, 10)
+    charge = np.linspace(0.001, 0.015, 35)
+    discharge = np.linspace(0.001, 0.015, 35)
+    computation = np.linspace(0.001, 0.015, 15)
 
     for ch in charge:
         for dis in discharge:
@@ -77,7 +77,7 @@ if __name__ == "__main__":
                 s = Simulator(
                     run_number=n_run,
                     config=medium_config,
-                    move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY],
+                    move_computation_policies=[MoveComputationPolicy.RANDOM],
                 )
                 # s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY], report_dir="results")
 
