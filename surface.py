@@ -1,15 +1,16 @@
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-import tikzplotlib
+#import tikzplotlib
 
 import pandas as pd
 
 pd.set_option('display.float_format', '{:.19f}'.format)
 
-epochs = 20000
+epochs = 30000
 n_robots = 15
+
+filtered_computation = [0.6, 0.9, 1.2, 1.5]
 
 # Define your function - placeholder
 def compute_value(x, y, z):
@@ -49,8 +50,6 @@ def plot_heatmap(filename=None):
     charge_rate = sorted(df[df["charge_rate"] >= 0.004]["charge_rate"].unique())
     discharge_rate = sorted(df[df["discharge_rate"] >= 0.004]["discharge_rate"].unique())
     computation = sorted(df[df["AI_computation"] >= 0.004]["AI_computation"].unique())
-
-    print(len(charge_rate))
 
     n_plots = len(computation)
     n_cols = 5
@@ -93,8 +92,8 @@ def plot_heatmap(filename=None):
 
                 # if value < 0:
                 #     value = 0
-                if value2 < 0:  
-                    value2 = 0
+                # if value2 < 0:  
+                #     value2 = 0
 
                 if value < min_val:
                     min_val = value
@@ -109,15 +108,15 @@ def plot_heatmap(filename=None):
                 a[id_x][id_y] = value
                 a2[id_x][id_y] = value2
 
-        if round(z*100, 2) in [0.6, 0.9, 1.2, 1.5]:
-            dump_data(a2, round(z*100, 2))
+        if round(z*100, 2) in filtered_computation:
+            dump_data(a, round(z*100, 2))
 
-        im = axes[id_z].imshow(a, extent=(discharge_rate[0]*100, discharge_rate[-1]*100, charge_rate[0]*100, charge_rate[-1]*100), cmap='viridis', aspect='auto',origin='lower', vmin=0, vmax=170)
+        im = axes[id_z].imshow(a, extent=(discharge_rate[0]*100, discharge_rate[-1]*100, charge_rate[0]*100, charge_rate[-1]*100), cmap='viridis', aspect='auto',origin='lower')#, vmin=0, vmax=170)
         axes[id_z].set_title(f'Computation = {round(z*100, 2)} (% tot battery)')
         axes[id_z].set_xlabel('Discharge rate (% tot battery)')
         axes[id_z].set_ylabel('Charge rate (% tot battery)')
 
-        im2 = axes2[id_z].imshow(a2, extent=(discharge_rate[0]*100, discharge_rate[-1]*100, charge_rate[0]*100, charge_rate[-1]*100), cmap='viridis', aspect='auto',origin='lower', vmin=0, vmax=30)
+        im2 = axes2[id_z].imshow(a2, extent=(discharge_rate[0]*100, discharge_rate[-1]*100, charge_rate[0]*100, charge_rate[-1]*100), cmap='viridis', aspect='auto',origin='lower')#, vmin=0, vmax=30)
         axes2[id_z].set_title(f'Computation = {round(z*100, 2)} (% tot battery)')
         axes2[id_z].set_xlabel('Discharge rate (% tot battery)')
         axes2[id_z].set_ylabel('Charge rate (% tot battery)')
@@ -125,26 +124,34 @@ def plot_heatmap(filename=None):
         fig.colorbar(im, ax=axes[id_z])
         fig2.colorbar(im2, ax=axes2[id_z])
 
+    cdf_data = {}
+
     for label, data in a3.items():
         sorted_data = np.sort(data)
         cdf = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
         axes3.plot(sorted_data, cdf, marker='.', linestyle='none', label=label, markersize=3)
+        if label not in cdf_data:
+            cdf_data[str(round(label, 1)) + "_x"] = sorted_data
+            cdf_data[str(round(label, 1)) + "_y"] = cdf
+
+
+    pd.DataFrame(cdf_data).to_csv("cdf_data_LB.csv", index=False)
 
     # Customize plot
     axes3.set_xlabel('Operating time gain (%)')
     axes3.set_ylabel('CDF')
     axes3.grid(True)
     axes3.legend(title="Computation (%)")
-    fig3.savefig("cdf.pdf")
+    fig3.savefig("res_LB_offloading_benefits.png")
     #tikzplotlib.save("cdf.tex")
 
-    pd.DataFrame(a3).to_csv("CDF.csv", index=False)
+    #pd.DataFrame(a3).to_csv("CDF.csv", index=False)
     fig.tight_layout()
     fig2.tight_layout()
-    fig.savefig("prova.png")
-    fig2.savefig("prova2.png")
+    fig.savefig("res_offloading_benefits.png")
+    fig2.savefig("res_LB_offloading_gap.png")
 
-plot_heatmap(filename="results_lb.csv")
+plot_heatmap(filename="results_LB.csv")
 
 
     
