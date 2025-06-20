@@ -110,9 +110,10 @@ class Simulator:
             self.move_computation_policy = MoveComputationPolicy.NONE
             self.optimize_computation_frequency = None
             self.optimize_computation_window = None
-            op = self.__run(epochs, it+offset)
+            op, wasted_computation = self.__run(epochs, it+offset)
             if self.sim_name is None:
                 report["no_offload"] = op
+                report["wasted_computation_no_offload"] = wasted_computation
 
             for move_computation_policy in self.move_computation_policies:
                 self.initialize_stats()   
@@ -121,9 +122,10 @@ class Simulator:
                 self.move_computation_policy = move_computation_policy
                 self.optimize_computation_frequency = None
                 self.optimize_computation_window = None
-                op = self.__run(epochs, it+offset)
+                op, wasted_computation = self.__run(epochs, it+offset)
                 if self.sim_name is None:
                     report["offload"] = op
+                    report["wasted_computation_offload"] = wasted_computation
                 
             for allocation_strategy in self.allocation_strategies:
                 self.initialize_stats()   
@@ -144,6 +146,8 @@ class Simulator:
         x = []
         u = []
         o = []
+
+        wasted_computation = 0
         
         # Initialize a dictionary to store battery levels for each robot
         for r in self.robots:
@@ -162,6 +166,10 @@ class Simulator:
                 
             for r in self.robots:
                 r.update_computation()
+
+            for r in self.robots:
+                if r.get_status() == "charging" and not r.is_hosting():
+                    wasted_computation += 1
             
             assert self.check_infrastructure(), self.print_infrastructure(ep)
             self.update_stats(ep)
@@ -189,7 +197,7 @@ class Simulator:
             for _, robot in enumerate(self.robots):
                 stat = robot.get_stats()
                 op_time += stat["operation_time"]
-            return op_time
+            return op_time, wasted_computation
         # self.plot_results(res)
     
     def marshal_variables(self, x, u, o):

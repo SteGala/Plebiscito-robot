@@ -62,6 +62,7 @@ def plot_heatmap(filename=None):
     fig3, axes3 = plt.subplots(figsize=(5, 4))
 
     a3 = {}
+    a4 = {}
     # print(df)
     for id_z, z in enumerate(computation):
         min_val = 1500000
@@ -69,6 +70,7 @@ def plot_heatmap(filename=None):
         min_val_2 = 1500000
         max_val_2 = 0
         a3[round(z*100, 2)] = []
+        a4[round(z*100, 2)] = []
 
         a = np.zeros((len(charge_rate), len(discharge_rate)))
         a2 = np.zeros((len(charge_rate), len(discharge_rate)))
@@ -89,6 +91,7 @@ def plot_heatmap(filename=None):
                 value3 = 100*(impl_offload - no_offload) / no_offload
 
                 a3[round(z*100, 2)].append(value3)
+                a4[round(z*100, 2)].append(value)
 
                 # if value < 0:
                 #     value = 0
@@ -134,24 +137,33 @@ def plot_heatmap(filename=None):
             cdf_data[str(round(label, 1)) + "_x"] = sorted_data
             cdf_data[str(round(label, 1)) + "_y"] = cdf
 
+    pd.DataFrame(cdf_data).to_csv("cdf_data_RANDOM.csv", index=False)
 
-    pd.DataFrame(cdf_data).to_csv("cdf_data_LB.csv", index=False)
+    cdf_data = {}
+
+    for label, data in a4.items():
+        sorted_data = np.sort(data)
+        cdf = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
+        if label not in cdf_data:
+            cdf_data[str(round(label, 1)) + "_x"] = sorted_data
+            cdf_data[str(round(label, 1)) + "_y"] = cdf
+
+    pd.DataFrame(cdf_data).to_csv("cdf_data_offload_server.csv", index=False)
 
     # Customize plot
     axes3.set_xlabel('Operating time gain (%)')
     axes3.set_ylabel('CDF')
     axes3.grid(True)
     axes3.legend(title="Computation (%)")
-    fig3.savefig("res_LB_offloading_benefits.png")
-    #tikzplotlib.save("cdf.tex")
+    fig3.savefig("res_RANDOM_offloading_benefits.png")
 
     #pd.DataFrame(a3).to_csv("CDF.csv", index=False)
     fig.tight_layout()
     fig2.tight_layout()
     fig.savefig("res_offloading_benefits.png")
-    fig2.savefig("res_LB_offloading_gap.png")
+    fig2.savefig("res_RANDOM_offloading_gap.png")
 
-plot_heatmap(filename="results_LB.csv")
+plot_heatmap(filename="results_RANDOM.csv")
 
 
     
