@@ -57,14 +57,14 @@ def compute_value(x, y, epochs, tot_battery, n_robot):
 # Note: every time instant represent one minute of simulation, therefore, the total_battery is multiplied by 60 to get the total battery
 
 if __name__ == "__main__":
-    duration = 20000
+    duration = 30000
     n_run = 1
 
     results = []
 
-    charge = np.linspace(0.001, 0.015, 35)
-    discharge = np.linspace(0.001, 0.015, 35)
-    computation = np.linspace(0.001, 0.015, 15)
+    charge = np.linspace(0.004, 0.016, 30)
+    discharge = np.linspace(0.004, 0.016, 30)
+    computation = np.linspace(0.006, 0.015, 4)
 
     for ch in charge:
         for dis in discharge:
@@ -77,12 +77,14 @@ if __name__ == "__main__":
                 s = Simulator(
                     run_number=n_run,
                     config=medium_config,
-                    move_computation_policies=[MoveComputationPolicy.RANDOM],
+                    move_computation_policies=[MoveComputationPolicy.SMALLEST_BATTERY],
                 )
                 # s = Simulator(run_number=n_run, config=medium_config, move_computation_policies=[MoveComputationPolicy.LARGEST_BATTERY], report_dir="results")
 
                 res = s.run(duration)
                 d = {}
+                d["wasted_computation_no_offload"] = res["wasted_computation_no_offload"]
+                d["wasted_computation_offload"] = res["wasted_computation_offload"]
                 d["charge_rate"] = ch
                 d["discharge_rate"] = dis
                 d["AI_computation"] = comp

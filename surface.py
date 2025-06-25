@@ -63,6 +63,8 @@ def plot_heatmap(filename=None):
 
     a3 = {}
     a4 = {}
+    a5 = {}
+    a6 = {}
     # print(df)
     for id_z, z in enumerate(computation):
         min_val = 1500000
@@ -71,6 +73,8 @@ def plot_heatmap(filename=None):
         max_val_2 = 0
         a3[round(z*100, 2)] = []
         a4[round(z*100, 2)] = []
+        a5[round(z*100, 2)] = []
+        a6[round(z*100, 2)] = []
 
         a = np.zeros((len(charge_rate), len(discharge_rate)))
         a2 = np.zeros((len(charge_rate), len(discharge_rate)))
@@ -87,11 +91,13 @@ def plot_heatmap(filename=None):
                 # no_offload = df[(df["charge_rate"] == x) & (df["discharge_rate"] == y) & (df["AI_computation"] == z)]["no_offload"].values[0]
                 impl_offload = df[(df["charge_rate"] == x) & (df["discharge_rate"] == y) & (df["AI_computation"] == z)]["offload"].values[0]
                 value = 100*(best_offload - no_offload) / no_offload
-                value2 = 100*(best_offload - impl_offload) / impl_offload
-                value3 = 100*(impl_offload - no_offload) / no_offload
+                value3 = 100*(best_offload - impl_offload) / impl_offload
+                value2 = 100*(impl_offload - no_offload) / no_offload
 
                 a3[round(z*100, 2)].append(value3)
                 a4[round(z*100, 2)].append(value)
+                a5[round(z*100, 2)].append(df[(df["charge_rate"] == x) & (df["discharge_rate"] == y) & (df["AI_computation"] == z)]["wasted_computation_no_offload"].values[0] / (n_robots*epochs))
+                a6[round(z*100, 2)].append(df[(df["charge_rate"] == x) & (df["discharge_rate"] == y) & (df["AI_computation"] == z)]["wasted_computation_offload"].values[0] / (n_robots*epochs))
 
                 # if value < 0:
                 #     value = 0
@@ -112,7 +118,7 @@ def plot_heatmap(filename=None):
                 a2[id_x][id_y] = value2
 
         if round(z*100, 2) in filtered_computation:
-            dump_data(a, round(z*100, 2))
+            dump_data(a2, round(z*100, 2))
 
         im = axes[id_z].imshow(a, extent=(discharge_rate[0]*100, discharge_rate[-1]*100, charge_rate[0]*100, charge_rate[-1]*100), cmap='viridis', aspect='auto',origin='lower')#, vmin=0, vmax=170)
         axes[id_z].set_title(f'Computation = {round(z*100, 2)} (% tot battery)')
@@ -149,6 +155,8 @@ def plot_heatmap(filename=None):
             cdf_data[str(round(label, 1)) + "_y"] = cdf
 
     pd.DataFrame(cdf_data).to_csv("cdf_data_offload_server.csv", index=False)
+    pd.DataFrame(a5).to_csv("wasted_computation_no_offload.csv", index=False)
+    pd.DataFrame(a6).to_csv("wasted_computation_offload_RANDOM.csv", index=False)
 
     # Customize plot
     axes3.set_xlabel('Operating time gain (%)')
