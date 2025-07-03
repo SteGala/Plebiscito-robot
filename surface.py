@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 #import tikzplotlib
+import os
 
 import pandas as pd
 
@@ -42,7 +43,7 @@ def plot_heatmap(filename=None):
                 data_d["y"].append(charge_rate[i]*100)
                 data_d["z"].append(data[i][j])
         
-        pd.DataFrame(data_d).to_csv(f"data_{z}.csv", index=False)
+        pd.DataFrame(data_d).to_csv(os.path.join(basedir, f"data_{z}.csv"), index=False)
 
     df = pd.read_csv(filename)
 
@@ -143,7 +144,7 @@ def plot_heatmap(filename=None):
             cdf_data[str(round(label, 1)) + "_x"] = sorted_data
             cdf_data[str(round(label, 1)) + "_y"] = cdf
 
-    pd.DataFrame(cdf_data).to_csv("cdf_data_RANDOM.csv", index=False)
+    pd.DataFrame(cdf_data).to_csv(os.path.join(basedir, "cdf_data_RANDOM.csv"), index=False)
 
     cdf_data = {}
 
@@ -154,24 +155,26 @@ def plot_heatmap(filename=None):
             cdf_data[str(round(label, 1)) + "_x"] = sorted_data
             cdf_data[str(round(label, 1)) + "_y"] = cdf
 
-    pd.DataFrame(cdf_data).to_csv("cdf_data_offload_server.csv", index=False)
-    pd.DataFrame(a5).to_csv("wasted_computation_no_offload.csv", index=False)
-    pd.DataFrame(a6).to_csv("wasted_computation_offload_RANDOM.csv", index=False)
+    pd.DataFrame(cdf_data).to_csv(os.path.join(basedir, "cdf_data_offload_server.csv"), index=False)
+    pd.DataFrame(a5).to_csv(os.path.join(basedir, "wasted_computation_no_offload.csv"), index=False)
+    pd.DataFrame(a6).to_csv(os.path.join(basedir, "wasted_computation_offload_RANDOM.csv"), index=False)
 
     # Customize plot
     axes3.set_xlabel('Operating time gain (%)')
     axes3.set_ylabel('CDF')
     axes3.grid(True)
     axes3.legend(title="Computation (%)")
-    fig3.savefig("res_RANDOM_offloading_benefits.png")
+    fig3.savefig(os.path.join(basedir, "res_RANDOM_offloading_benefits.png"))
 
     #pd.DataFrame(a3).to_csv("CDF.csv", index=False)
     fig.tight_layout()
     fig2.tight_layout()
-    fig.savefig("res_offloading_benefits.png")
-    fig2.savefig("res_RANDOM_offloading_gap.png")
+    fig.savefig(os.path.join(basedir, "res_offloading_benefits.png"))
+    fig2.savefig(os.path.join(basedir, "res_RANDOM_offloading_gap.png"))
 
-plot_heatmap(filename="results_RANDOM.csv")
+basedir = "results/15nodes"    
+
+plot_heatmap(filename=os.path.join(basedir, "results_RANDOM.csv"))
 
 
     
